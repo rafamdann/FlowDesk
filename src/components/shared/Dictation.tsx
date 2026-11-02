@@ -116,7 +116,7 @@ async function transcribe(audio: Blob, lang: Lang): Promise<string> {
     const res = (error as { context?: Response }).context
     const body = res && typeof res.json === 'function' ? await res.json().catch(() => null) : null
     console.error('[dictation]', body?.error ?? error)
-    throw new Error()
+    throw new Error(body?.error ?? error.message)
   }
   return String(data?.text ?? '')
 }
@@ -206,7 +206,8 @@ export function Dictation() {
 
   useEffect(() => {
     if (!notice) return
-    const id = setTimeout(() => setNotice(''), 3500)
+    // Longer for an error with a reason attached: there is more to read.
+    const id = setTimeout(() => setNotice(''), notice.length > 60 ? 10000 : 3500)
     return () => clearTimeout(id)
   }, [notice])
 
@@ -277,8 +278,11 @@ export function Dictation() {
         const text = (await transcribe(new Blob(chunks, { type: rec.mimeType }), picked ?? lang)).trim()
         if (!text) setNotice(t('dictate_nothingHeard'))
         else if (el.isConnected) insertInto(el, text, savedRange.current)
-      } catch {
-        setNotice(t('dictate_failed'))
+      } catch (err) {
+        // With the reason, when there is one: "could not" alone gives nobody
+        // anything to fix.
+        const reason = (err as Error)?.message
+        setNotice(reason ? `${t('dictate_failed')} ${reason}` : t('dictate_failed'))
       }
       setPhase('idle')
       setTarget(dictationTarget(document.activeElement) ?? (el.isConnected ? el : null))

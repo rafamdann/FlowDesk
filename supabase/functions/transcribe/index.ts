@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
 
   const language = form.get('language') === 'pt' ? 'pt' : 'en'
 
-  let lastError = ''
+  let reason = ''
   for (const model of MODELS) {
     const upstream = new FormData()
     upstream.append('file', audio, audio.name || 'dictation.webm')
@@ -83,12 +83,19 @@ Deno.serve(async (req) => {
       return json({ text: String(data.text ?? '').trim() })
     }
 
-    lastError = await res.text()
-    console.error(`[transcribe] ${model} failed (${res.status}):`, lastError)
-    // Only a model the account cannot use is worth retrying on the other one;
-    // a bad file or an exhausted quota fails the same way on both.
-    if (res.status !== 404 && res.status !== 403 && !/model/i.test(lastError)) break
+    const raw = await res.text()
+    console.error(`[transcribe] ${model} failed (${res.status}):`, raw)
+    // OpenAI's own words, so the person at the mic sees what actually went
+    // wrong — a key without audio permission, no credit, a file it refused —
+    // rather than a shrug. Its messages never contain the key itself.
+    let message = raw
+    try {
+      message = JSON.parse(raw)?.error?.message ?? raw
+    } catch { /* not JSON: keep the text */ }
+    reason = `${model} → ${res.status}: ${message}`.slice(0, 300)
+    // A bad key or no credit fails the same way on every model.
+    if (res.status === 401 || res.status === 429) break
   }
 
-  return json({ error: 'Could not transcribe that recording.' }, 502)
+  return json({ error: reason || 'Could not transcribe that recording.' }, 502)
 })
