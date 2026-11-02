@@ -20,12 +20,16 @@ const MODELS = ['gpt-4o-transcribe', 'whisper-1']
 // OpenAI's own ceiling for one file.
 const MAX_BYTES = 25 * 1024 * 1024
 
-// A nudge towards the vocabulary of the work, which is what a generic model
-// gets wrong: client names, platforms, the jargon of social media.
-const PROMPTS: Record<string, string> = {
-  en: 'FlowDesk notes, tasks and work log entries for a social media agency: posts, reels, stories, ads, campaigns, clients.',
-  pt: 'Notas, tarefas e registos de trabalho do FlowDesk para uma agência de redes sociais: publicações, reels, stories, anúncios, campanhas, clientes.',
-}
+// No standing prompt. There was one, describing the work, and on a recording
+// with nothing in it the model read it back as if it had been said. The only
+// hint now is the team's dictionary — names it must spell right — and the
+// page does not send silence at all.
+
+// What the models are known to invent from silence or breath: subtitle
+// credits and sign-offs from the videos they were trained on.
+const PHANTOMS = /amara\.org|legendas pela comunidade|thanks? (you )?for watching|obrigad[oa] por (assistir|ver)/i
+
+const squash = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -62,6 +66,7 @@ Deno.serve(async (req) => {
   if (audio.size > MAX_BYTES) return json({ error: 'That recording is too long to transcribe in one go.' }, 413)
 
   const language = form.get('language') === 'pt' ? 'pt' : 'en'
+  const vocabulary = String(form.get('vocabulary') ?? '').slice(0, 800).trim()
 
   let reason = ''
   for (const model of MODELS) {
@@ -69,7 +74,7 @@ Deno.serve(async (req) => {
     upstream.append('file', audio, audio.name || 'dictation.webm')
     upstream.append('model', model)
     upstream.append('language', language)
-    upstream.append('prompt', PROMPTS[language])
+    if (vocabulary) upstream.append('prompt', vocabulary)
     upstream.append('response_format', 'json')
 
     const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -80,7 +85,12 @@ Deno.serve(async (req) => {
 
     if (res.ok) {
       const data = await res.json()
-      return json({ text: String(data.text ?? '').trim() })
+      const text = String(data.text ?? '').trim()
+      // The hint read back, or a known phantom, means nobody said anything.
+      const echo = vocabulary && squash(text).length > 0 && squash(vocabulary).includes(squash(text))
+      // Short only: a long dictation that happens to mention one is real.
+      if (echo || (text.length < 80 && PHANTOMS.test(text))) return json({ text: '' })
+      return json({ text })
     }
 
     const raw = await res.text()

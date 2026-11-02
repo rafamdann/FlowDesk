@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Mic, Square, X, Loader2 } from 'lucide-react'
+import { Mic, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useLanguageStore } from '../../store/languageStore'
+import { useDictationStore } from '../../store/dictationStore'
 import { useT } from '../../i18n/useT'
+import { applyCorrections, formatShortcut, learnCorrections, matchesShortcut, vocabulary } from '../../lib/dictation'
 import type { Lang } from '../../i18n/translations'
 
 /**
@@ -12,11 +14,13 @@ import type { Lang } from '../../i18n/translations'
  * well over a hundred of them — notes, tasks, the work log, comments, chat,
  * every dialog — and per field, the ones nobody remembered would be the ones
  * without it. Instead a mic follows focus: whichever box has the caret gets
- * one in its corner, including boxes added after this was written.
+ * one in its corner, including boxes added after this was written. The
+ * shortcut (Ctrl+Space unless changed) starts and stops it from the keyboard.
  *
  * The browser records and the `transcribe` edge function turns it into text,
- * in whichever language is picked. Not the browser's own speech recognition:
- * the desktop app is Electron, where that fails with a network error.
+ * in the app's language, with the team's dictionary as a hint. Not the
+ * browser's own speech recognition: the desktop app is Electron, where that
+ * fails with a network error.
  *
  * A field that should never take dictation opts out with data-no-dictation.
  */
@@ -27,6 +31,16 @@ type Phase = 'idle' | 'recording' | 'transcribing'
 const MAX_MS = 10 * 60 * 1000
 const SIZE = 28
 const INSET = 4
+const BARS = 5
+/** How often the level is read: the bars' frame rate, and the silence clock. */
+const TICK_MS = 50
+/** Below this a recording is room noise, not a voice. */
+const VOICE_RMS = 0.02
+/**
+ * Less voice than this and nothing is sent. Silence is not just wasted money:
+ * given nothing to hear, the model makes something up.
+ */
+const MIN_VOICE_MS = 300
 
 /** Text inputs only: dictating into a date, a number or a password is nonsense. */
 const TEXT_INPUTS = new Set(['text', 'search'])
@@ -34,9 +48,15 @@ const TEXT_INPUTS = new Set(['text', 'search'])
 interface TiptapHost extends HTMLElement {
   editor?: {
     isDestroyed: boolean
+    getText: () => string
     state: { selection: { from: number }; doc: { textBetween: (a: number, b: number) => string } }
     chain: () => { focus: () => { insertContent: (s: string) => { run: () => boolean } } }
   }
+}
+
+interface Notice {
+  text: string
+  undo?: () => void
 }
 
 function dictationTarget(el: EventTarget | null): HTMLElement | null {
@@ -50,6 +70,14 @@ function dictationTarget(el: EventTarget | null): HTMLElement | null {
     return host
   }
   return null
+}
+
+/** Everything in the box as plain text, for spotting what they changed. */
+function fieldText(el: HTMLElement) {
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value
+  const editor = (el as TiptapHost).editor
+  if (editor && !editor.isDestroyed) return editor.getText()
+  return el.innerText
 }
 
 /** Joins dictated text onto what is around the caret without gluing words together. */
@@ -98,7 +126,7 @@ function insertInto(el: HTMLElement, raw: string, savedRange: Range | null) {
   document.execCommand('insertText', false, spaced(raw, ' ', ''))
 }
 
-async function transcribe(audio: Blob, lang: Lang): Promise<string> {
+async function transcribe(audio: Blob, lang: Lang, vocab: string): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) throw new Error()
 
@@ -106,6 +134,7 @@ async function transcribe(audio: Blob, lang: Lang): Promise<string> {
   const form = new FormData()
   form.append('audio', audio, `dictation.${ext}`)
   form.append('language', lang)
+  if (vocab) form.append('vocabulary', vocab)
 
   const { data, error } = await supabase.functions.invoke('transcribe', {
     headers: { Authorization: `Bearer ${session.access_token}` },
@@ -122,17 +151,16 @@ async function transcribe(audio: Blob, lang: Lang): Promise<string> {
 }
 
 export function Dictation() {
-  const { t, lang: appLang } = useT()
-  const dictationLang = useLanguageStore((s) => s.dictationLang) ?? appLang
-  const setDictationLang = useLanguageStore((s) => s.setDictationLang)
+  const { t } = useT()
+  const shortcut = useDictationStore((s) => s.shortcut)
+  const shortcutLabel = formatShortcut(shortcut)
 
   const [target, setTarget] = useState<HTMLElement | null>(null)
   const [phase, setPhaseState] = useState<Phase>('idle')
   const [lastPos, setPos] = useState<{ right: number; top: number } | null>(null)
-  const [elapsed, setElapsed] = useState(0)
-  const [notice, setNotice] = useState('')
+  const [notice, setNotice] = useState<Notice | null>(null)
 
-  // Read from focus listeners registered once, so kept in step by hand.
+  // Read from listeners registered once, so kept in step by hand.
   const phaseRef = useRef<Phase>('idle')
   const setPhase = (next: Phase) => {
     phaseRef.current = next
@@ -141,6 +169,31 @@ export function Dictation() {
   const recorder = useRef<MediaRecorder | null>(null)
   const discard = useRef(false)
   const savedRange = useRef<Range | null>(null)
+  const bars = useRef<(HTMLSpanElement | null)[]>([])
+  /** The last dictation, watched so a hand correction can be learned. */
+  const watch = useRef<{ el: HTMLElement; before: string; dictated: string } | null>(null)
+
+  const say = useCallback((text: string, undo?: () => void) => setNotice({ text, undo }), [setNotice])
+
+  /**
+   * Compares the box with how dictation left it, and adds any name they
+   * fixed by hand to the team's dictionary. Runs when they leave the box, so
+   * a half-typed correction is never mistaken for the finished one.
+   */
+  const learn = useCallback(() => {
+    const w = watch.current
+    if (!w) return
+    if (!w.el.isConnected) {
+      watch.current = null
+      return
+    }
+    const { add, remove } = useDictationStore.getState()
+    for (const fix of learnCorrections(w.before, fieldText(w.el), w.dictated)) {
+      add(fix.word, fix.heard).then((entry) => {
+        if (entry) say(t('dictate_learned').replace('{word}', entry.word), () => remove(entry.id))
+      })
+    }
+  }, [say, t])
 
   // Follow focus. While recording the mic stays with the box it started in,
   // even if they click elsewhere to read something.
@@ -149,7 +202,13 @@ export function Dictation() {
       if (phaseRef.current !== 'idle') return
       setTarget(dictationTarget(e.target))
     }
-    const onFocusOut = () => {
+    const onFocusOut = (e: FocusEvent) => {
+      if (watch.current && e.target instanceof Node && watch.current.el.contains(e.target)) {
+        // Only when focus has really left the box, not moved inside it.
+        setTimeout(() => {
+          if (watch.current && !watch.current.el.contains(document.activeElement)) learn()
+        }, 0)
+      }
       // Focus moves out and then in; only clear if it went nowhere useful.
       setTimeout(() => {
         if (phaseRef.current !== 'idle') return
@@ -162,7 +221,7 @@ export function Dictation() {
       document.removeEventListener('focusin', onFocusIn)
       document.removeEventListener('focusout', onFocusOut)
     }
-  }, [])
+  }, [learn])
 
   const stop = useCallback((keep: boolean) => {
     discard.current = !keep
@@ -206,22 +265,10 @@ export function Dictation() {
 
   useEffect(() => {
     if (!notice) return
-    // Longer for an error with a reason attached: there is more to read.
-    const id = setTimeout(() => setNotice(''), notice.length > 60 ? 10000 : 3500)
+    // Longer for anything with more to read, or a button to reach.
+    const id = setTimeout(() => setNotice(null), notice.undo || notice.text.length > 60 ? 8000 : 3500)
     return () => clearTimeout(id)
   }, [notice])
-
-  // The timer, and the ceiling on how long one recording can run.
-  useEffect(() => {
-    if (phase !== 'recording') return
-    const started = Date.now()
-    const id = setInterval(() => {
-      const ms = Date.now() - started
-      setElapsed(ms)
-      if (ms >= MAX_MS) stop(true)
-    }, 250)
-    return () => clearInterval(id)
-  }, [phase, stop])
 
   // Esc throws the recording away. Captured first, so the dialog the box sits
   // in does not close along with it.
@@ -237,13 +284,15 @@ export function Dictation() {
     return () => window.removeEventListener('keydown', onKey, true)
   }, [phase, stop])
 
-  const start = async () => {
-    const el = target
-    if (!el) return
+  const start = async (el: HTMLElement) => {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      setNotice(t('dictate_unsupported'))
+      say(t('dictate_unsupported'))
       return
     }
+    // Whatever they corrected in the last one is settled now.
+    learn()
+    const dict = useDictationStore.getState()
+    if (!dict.loaded) dict.load()
 
     const sel = window.getSelection()
     savedRange.current = sel && sel.rangeCount && el.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null
@@ -253,9 +302,38 @@ export function Dictation() {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     } catch (err) {
       const name = (err as DOMException)?.name
-      setNotice(t(name === 'NotFoundError' ? 'dictate_noMic' : 'dictate_micBlocked'))
+      say(t(name === 'NotFoundError' ? 'dictate_noMic' : 'dictate_micBlocked'))
       return
     }
+
+    // The bars, and the measure of whether anyone actually spoke.
+    const audio = new AudioContext()
+    const analyser = audio.createAnalyser()
+    analyser.fftSize = 512
+    analyser.smoothingTimeConstant = 0.5
+    audio.createMediaStreamSource(stream).connect(analyser)
+    const wave = new Float32Array(analyser.fftSize)
+    const freq = new Uint8Array(analyser.frequencyBinCount)
+    // Bins are sampleRate / fftSize wide (~94 Hz); speech sits in the first
+    // thirty or so, split here into one band per bar.
+    const band = Math.max(1, Math.floor(3000 / (audio.sampleRate / analyser.fftSize) / BARS))
+    const started = Date.now()
+    let voiceMs = 0
+    const meter = setInterval(() => {
+      analyser.getFloatTimeDomainData(wave)
+      let sum = 0
+      for (const v of wave) sum += v * v
+      if (Math.sqrt(sum / wave.length) > VOICE_RMS) voiceMs += TICK_MS
+      analyser.getByteFrequencyData(freq)
+      bars.current.forEach((bar, k) => {
+        if (!bar) return
+        let total = 0
+        for (let b = 1 + k * band; b < 1 + (k + 1) * band; b++) total += freq[b]
+        const level = Math.min(1, (total / band / 255) * 1.8)
+        bar.style.height = `${3 + level * 15}px`
+      })
+      if (Date.now() - started >= MAX_MS) stop(true)
+    }, TICK_MS)
 
     const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find((m) =>
       MediaRecorder.isTypeSupported(m),
@@ -264,36 +342,72 @@ export function Dictation() {
     const chunks: Blob[] = []
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
     rec.onstop = async () => {
+      clearInterval(meter)
+      audio.close()
       stream.getTracks().forEach((track) => track.stop())
       recorder.current = null
-      if (discard.current || chunks.length === 0) {
+      const done = () => {
         setPhase('idle')
-        setTarget(dictationTarget(document.activeElement))
-        return
+        setTarget(dictationTarget(document.activeElement) ?? (el.isConnected ? el : null))
+      }
+      if (discard.current || chunks.length === 0) return done()
+      if (voiceMs < MIN_VOICE_MS) {
+        say(t('dictate_nothingHeard'))
+        return done()
       }
       setPhase('transcribing')
       try {
-        // Whatever is picked now, not when recording began.
-        const { dictationLang: picked, lang } = useLanguageStore.getState()
-        const text = (await transcribe(new Blob(chunks, { type: rec.mimeType }), picked ?? lang)).trim()
-        if (!text) setNotice(t('dictate_nothingHeard'))
-        else if (el.isConnected) insertInto(el, text, savedRange.current)
+        const { words } = useDictationStore.getState()
+        const lang = useLanguageStore.getState().lang
+        const heard = (await transcribe(new Blob(chunks, { type: rec.mimeType }), lang, vocabulary(words))).trim()
+        const text = applyCorrections(heard, words)
+        if (!text) say(t('dictate_nothingHeard'))
+        else if (el.isConnected) {
+          insertInto(el, text, savedRange.current)
+          watch.current = { el, before: fieldText(el), dictated: text }
+        }
       } catch (err) {
         // With the reason, when there is one: "could not" alone gives nobody
         // anything to fix.
         const reason = (err as Error)?.message
-        setNotice(reason ? `${t('dictate_failed')} ${reason}` : t('dictate_failed'))
+        say(reason ? `${t('dictate_failed')} ${reason}` : t('dictate_failed'))
       }
-      setPhase('idle')
-      setTarget(dictationTarget(document.activeElement) ?? (el.isConnected ? el : null))
+      done()
     }
 
     discard.current = false
     recorder.current = rec
     rec.start()
-    setElapsed(0)
     setPhase('recording')
   }
+
+  // The shortcut: starts in the focused box, stops (and keeps) wherever focus
+  // has wandered since. Captured, so it wins over whatever the box itself
+  // would do with the keys.
+  const startRef = useRef(start)
+  useEffect(() => {
+    startRef.current = start
+  })
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!matchesShortcut(e, useDictationStore.getState().shortcut)) return
+      // The settings field that is recording a new shortcut gets the keys.
+      if (document.activeElement?.closest('[data-shortcut-capture]')) return
+      if (phaseRef.current === 'recording') {
+        e.preventDefault()
+        stop(true)
+        return
+      }
+      if (phaseRef.current !== 'idle') return
+      const el = dictationTarget(document.activeElement)
+      if (!el) return
+      e.preventDefault()
+      setTarget(el)
+      startRef.current(el)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [stop])
 
   // Released if the app itself goes away mid-recording, so the mic light goes out.
   useEffect(() => () => stop(false), [stop])
@@ -302,10 +416,7 @@ export function Dictation() {
   const pos = target ? lastPos : null
   if (!pos && !notice) return null
 
-  const seconds = Math.floor(elapsed / 1000)
-  const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
-  const otherLang: Lang = dictationLang === 'en' ? 'pt' : 'en'
-  const btn = 'flex items-center justify-center rounded-full transition-colors'
+  const pill = 'flex items-center justify-center rounded-full bg-surface border shadow-sm transition-colors'
 
   return (
     <div
@@ -322,60 +433,66 @@ export function Dictation() {
       {pos && phase === 'idle' && (
         <button
           type="button"
-          onClick={start}
-          title={t('dictate_start').replace('{lang}', dictationLang.toUpperCase())}
-          aria-label={t('dictate_start').replace('{lang}', dictationLang.toUpperCase())}
-          className={`${btn} bg-surface/90 border border-border text-text-subtle shadow-sm hover:text-primary hover:border-primary/40`}
+          onClick={() => target && start(target)}
+          title={t('dictate_start').replace('{shortcut}', shortcutLabel)}
+          aria-label={t('dictate_start').replace('{shortcut}', shortcutLabel)}
+          className={`${pill} bg-surface/90 border-border text-text-subtle hover:text-primary hover:border-primary/40`}
           style={{ width: SIZE, height: SIZE }}
         >
           <Mic size={14} />
         </button>
       )}
 
+      {/* Recording: nothing but bars that move with the voice, so it is plain
+          the mic is hearing them. A click on them stops it. */}
       {pos && phase === 'recording' && (
-        <div className="flex items-center gap-1 h-7 pl-2.5 pr-0.5 rounded-full bg-danger text-white shadow-lg">
-          <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-          <span className="text-xs font-medium tabular-nums w-9">{clock}</span>
-          {/* Read only when it is sent, so it can be switched mid-sentence. */}
-          <button
-            type="button"
-            onClick={() => setDictationLang(otherLang)}
-            title={t('dictate_language')}
-            className="h-5 px-1.5 rounded-full bg-white/20 hover:bg-white/30 text-[10px] font-semibold tracking-wide"
-          >
-            {dictationLang.toUpperCase()}
-          </button>
-          <button
-            type="button"
-            onClick={() => stop(false)}
-            title={t('dictate_cancel')}
-            aria-label={t('dictate_cancel')}
-            className={`${btn} w-6 h-6 hover:bg-white/20`}
-          >
-            <X size={13} />
-          </button>
-          <button
-            type="button"
-            onClick={() => stop(true)}
-            title={t('dictate_stop')}
-            aria-label={t('dictate_stop')}
-            className={`${btn} w-6 h-6 bg-white text-danger hover:bg-white/90`}
-          >
-            <Square size={10} fill="currentColor" />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => stop(true)}
+          title={t('dictate_stop').replace('{shortcut}', shortcutLabel)}
+          aria-label={t('dictate_stop').replace('{shortcut}', shortcutLabel)}
+          className={`${pill} gap-[3px] border-primary/40 hover:border-primary`}
+          style={{ width: SIZE + 16, height: SIZE }}
+        >
+          {Array.from({ length: BARS }, (_, k) => (
+            <span
+              key={k}
+              ref={(node) => {
+                bars.current[k] = node
+              }}
+              className="w-[3px] rounded-full bg-primary transition-[height] duration-75"
+              style={{ height: 3 }}
+            />
+          ))}
+        </button>
       )}
 
       {pos && phase === 'transcribing' && (
-        <div className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-text-main text-white text-xs shadow-lg">
-          <Loader2 size={12} className="animate-spin" />
-          {t('dictate_transcribing')}
+        <div
+          className={`${pill} border-primary/40 text-primary`}
+          style={{ width: SIZE + 16, height: SIZE }}
+          aria-label={t('dictate_transcribing')}
+          title={t('dictate_transcribing')}
+        >
+          <Loader2 size={14} className="animate-spin" />
         </div>
       )}
 
       {notice && (
-        <div className="absolute bottom-full right-0 mb-1.5 w-max max-w-[260px] px-3 py-2 rounded-lg bg-text-main text-white text-xs shadow-lg animate-fade-in">
-          {notice}
+        <div className="absolute bottom-full right-0 mb-1.5 w-max max-w-[280px] flex items-center gap-3 px-3 py-2 rounded-lg bg-text-main text-white text-xs shadow-lg animate-fade-in">
+          <span>{notice.text}</span>
+          {notice.undo && (
+            <button
+              type="button"
+              onClick={() => {
+                notice.undo?.()
+                setNotice(null)
+              }}
+              className="font-semibold text-white/80 hover:text-white underline-offset-2 hover:underline"
+            >
+              {t('dictate_undo')}
+            </button>
+          )}
         </div>
       )}
     </div>
