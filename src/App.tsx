@@ -9,6 +9,7 @@ import { useNotificationStore } from './store/notificationStore'
 import { syncPush } from './lib/pushNotify'
 import { useUndoShortcut } from './hooks/useUndoShortcut'
 import { UndoToast } from './components/shared/UndoToast'
+import { Dictation } from './components/shared/Dictation'
 import { useUndoStore } from './store/undoStore'
 import { useDayOrderStore } from './store/dayOrderStore'
 import { useProjectStore } from './store/projectStore'
@@ -200,6 +201,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <UndoToast />
+      {/* A mic in whichever text box has focus, on every screen. */}
+      <Dictation />
       <AppInitializer>
         <Routes>
           <Route path="/" element={<RootRedirect />} />
