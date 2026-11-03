@@ -15,7 +15,7 @@ interface DictationState {
   words: DictWord[]
   loaded: boolean
   load: () => Promise<void>
-  /** Resolves to the new entry, or null if it was already there or failed. */
+  /** Resolves to the new entry, or null if it was already there. Throws if it could not be saved. */
   add: (word: string, heard?: string | null) => Promise<DictWord | null>
   remove: (id: string) => Promise<void>
 }
@@ -52,9 +52,11 @@ export const useDictationStore = create<DictationState>()(
           .insert({ word, heard })
           .select('id, word, heard')
           .single()
+        // Said, not swallowed: a word that quietly fails to save looks
+        // exactly like one that saved, until the list comes up empty.
         if (error || !data) {
           console.warn('[dictation] could not add to the dictionary:', error?.message)
-          return null
+          throw new Error(error?.message ?? 'not saved')
         }
         set((s) => ({ words: [...s.words, data as DictWord].sort((a, b) => a.word.localeCompare(b.word)) }))
         return data as DictWord

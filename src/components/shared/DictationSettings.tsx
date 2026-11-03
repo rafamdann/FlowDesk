@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Trash2, Keyboard, BookA } from 'lucide-react'
 import { useDictationStore } from '../../store/dictationStore'
 import { useT } from '../../i18n/useT'
-import { DEFAULT_SHORTCUT, formatShortcut, isMac, shortcutFromEvent } from '../../lib/dictation'
+import { chordTracker, DEFAULT_SHORTCUT, formatShortcut, isMac, sameShortcut, shortcutFromEvent } from '../../lib/dictation'
 
 /**
  * Dictation's settings: the shortcut, which is this device's, and the
@@ -13,36 +13,58 @@ export function DictationSettings() {
   const { shortcut, setShortcut, words, loaded, load, add, remove } = useDictationStore()
   const [capturing, setCapturing] = useState(false)
   const [draft, setDraft] = useState('')
-  const captureBtn = useRef<HTMLButtonElement>(null)
+  const [addError, setAddError] = useState('')
+  const captureBox = useRef<HTMLDivElement>(null)
+  const [chords] = useState(chordTracker)
 
   // The keys go to whatever has focus, and "Change" is not the field that
   // listens for them: hand focus over as soon as recording starts.
   useEffect(() => {
-    if (capturing) captureBtn.current?.focus()
-  }, [capturing])
+    if (capturing) {
+      chords.reset()
+      captureBox.current?.focus()
+    }
+  }, [capturing, chords])
 
   useEffect(() => {
     load()
   }, [load])
 
-  const capture = (e: React.KeyboardEvent) => {
+  // Any key with Ctrl, Alt or Cmd is taken as it is pressed; modifiers on
+  // their own (Ctrl, Ctrl + Alt) when they are let go. Every key is kept
+  // from the page meanwhile, so nothing else reacts to the one being tried.
+  const captureDown = (e: React.KeyboardEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (e.key === 'Escape') return setCapturing(false)
+    chords.down(e.nativeEvent)
+    if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) return setCapturing(false)
     const next = shortcutFromEvent(e.nativeEvent)
     if (!next) return
     setShortcut(next)
+    setCapturing(false)
+  }
+  const captureUp = (e: React.KeyboardEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const chord = chords.up(e.nativeEvent)
+    if (!chord) return
+    setShortcut(chord)
     setCapturing(false)
   }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!draft.trim()) return
-    await add(draft)
-    setDraft('')
+    setAddError('')
+    try {
+      await add(draft)
+      setDraft('')
+    } catch (err) {
+      setAddError(`${t('dictate_addFailed')} ${(err as Error).message}`)
+    }
   }
 
-  const isDefault = formatShortcut(shortcut) === formatShortcut(DEFAULT_SHORTCUT)
+  const isDefault = sameShortcut(shortcut, DEFAULT_SHORTCUT)
 
   return (
     <>
@@ -58,21 +80,25 @@ export function DictationSettings() {
         </h4>
         <p className="text-text-subtle text-xs mb-2.5">{t('dictate_shortcutHint')}</p>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            ref={captureBtn}
+          {/* Not a <button>: a focused button turns Space into a click, so
+              Ctrl + Space restarted the recording instead of being taken. */}
+          <div
+            ref={captureBox}
+            role="button"
+            tabIndex={0}
             data-shortcut-capture
             onClick={() => setCapturing(true)}
-            onKeyDown={capturing ? capture : undefined}
+            onKeyDown={capturing ? captureDown : undefined}
+            onKeyUp={capturing ? captureUp : undefined}
             onBlur={() => setCapturing(false)}
-            className={`min-w-[140px] h-9 px-3 rounded-lg border text-sm font-mono transition-colors ${
+            className={`min-w-[140px] h-9 px-3 rounded-lg border text-sm font-mono flex items-center justify-center cursor-pointer select-none transition-colors outline-none ${
               capturing
                 ? 'border-primary text-primary bg-primary/5'
                 : 'border-border-md text-text-main hover:border-primary/40'
             }`}
           >
             {capturing ? t('dictate_shortcutPress') : formatShortcut(shortcut)}
-          </button>
+          </div>
           {!capturing && (
             <button
               type="button"
@@ -92,7 +118,8 @@ export function DictationSettings() {
             </button>
           )}
         </div>
-        {isMac && <p className="text-text-subtle text-[11px] mt-2">{t('dictate_shortcutSpotlight')}</p>}
+        <p className="text-text-subtle text-[11px] mt-2">{t('dictate_shortcutRules')}</p>
+        {isMac && <p className="text-text-subtle text-[11px] mt-1">{t('dictate_shortcutSpotlight')}</p>}
       </section>
 
       {/* Dictionary */}
@@ -120,6 +147,7 @@ export function DictationSettings() {
             {t('dictate_add')}
           </button>
         </form>
+        {addError && <p className="text-danger text-xs -mt-1 mb-3">{addError}</p>}
         <ul className="overflow-y-auto min-h-0 -mx-1 px-1 divide-y divide-border">
           {loaded && words.length === 0 && <li className="text-text-subtle text-xs py-2">{t('dictate_dictionaryEmpty')}</li>}
           {words.map((w) => (

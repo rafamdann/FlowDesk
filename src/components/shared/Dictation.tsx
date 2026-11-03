@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabaseClient'
 import { useLanguageStore } from '../../store/languageStore'
 import { useDictationStore } from '../../store/dictationStore'
 import { useT } from '../../i18n/useT'
-import { applyCorrections, formatShortcut, learnCorrections, matchesShortcut, vocabulary } from '../../lib/dictation'
+import { applyCorrections, chordTracker, formatShortcut, learnCorrections, matchesShortcut, sameShortcut, vocabulary } from '../../lib/dictation'
 import type { Lang } from '../../i18n/translations'
 
 /**
@@ -189,9 +189,12 @@ export function Dictation() {
     }
     const { add, remove } = useDictationStore.getState()
     for (const fix of learnCorrections(w.before, fieldText(w.el), w.dictated)) {
-      add(fix.word, fix.heard).then((entry) => {
-        if (entry) say(t('dictate_learned').replace('{word}', entry.word), () => remove(entry.id))
-      })
+      add(fix.word, fix.heard)
+        .then((entry) => {
+          if (entry) say(t('dictate_learned').replace('{word}', entry.word), () => remove(entry.id))
+        })
+        // Learning is a bonus: a failure here is in the console, not in their way.
+        .catch(() => {})
     }
   }, [say, t])
 
@@ -389,24 +392,48 @@ export function Dictation() {
     startRef.current = start
   })
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!matchesShortcut(e, useDictationStore.getState().shortcut)) return
-      // The settings field that is recording a new shortcut gets the keys.
-      if (document.activeElement?.closest('[data-shortcut-capture]')) return
+    /** Start or stop; false when there was nothing to act on. */
+    const fire = () => {
       if (phaseRef.current === 'recording') {
-        e.preventDefault()
         stop(true)
-        return
+        return true
       }
-      if (phaseRef.current !== 'idle') return
+      if (phaseRef.current !== 'idle') return false
       const el = dictationTarget(document.activeElement)
-      if (!el) return
-      e.preventDefault()
+      if (!el) return false
       setTarget(el)
       startRef.current(el)
+      return true
     }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
+    // The settings field that is recording a new shortcut gets the keys.
+    const capturing = () => !!document.activeElement?.closest('[data-shortcut-capture]')
+
+    // A shortcut of modifiers alone (Ctrl, Ctrl + Alt) fires on release.
+    const chords = chordTracker()
+    const onDown = (e: KeyboardEvent) => {
+      chords.down(e)
+      if (!matchesShortcut(e, useDictationStore.getState().shortcut) || capturing()) return
+      if (fire()) e.preventDefault()
+    }
+    const onUp = (e: KeyboardEvent) => {
+      const chord = chords.up(e)
+      const shortcut = useDictationStore.getState().shortcut
+      if (!chord || shortcut.code || !sameShortcut(chord, shortcut) || capturing()) return
+      fire()
+    }
+    // Ctrl + click is not a tap of Ctrl; leaving the window ends any chord.
+    const onPointer = () => chords.spoil()
+    const onBlur = () => chords.reset()
+    window.addEventListener('keydown', onDown, true)
+    window.addEventListener('keyup', onUp, true)
+    window.addEventListener('pointerdown', onPointer, true)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onDown, true)
+      window.removeEventListener('keyup', onUp, true)
+      window.removeEventListener('pointerdown', onPointer, true)
+      window.removeEventListener('blur', onBlur)
+    }
   }, [stop])
 
   // Released if the app itself goes away mid-recording, so the mic light goes out.

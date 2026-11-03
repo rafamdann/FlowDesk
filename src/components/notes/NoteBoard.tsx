@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  Pin, PinOff, Trash2, Archive, ArchiveRestore, Palette, Plus, Search, X, FileText,
+  Pin, PinOff, Trash2, Archive, ArchiveRestore, Palette, Plus, Search, X, FileText, ChevronLeft,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { Project, ProjectNote } from '../../types'
@@ -128,10 +128,15 @@ export function NoteBoard({ project, ownerId, readOnly = false }: NoteBoardProps
     await deleteNote(note.id)
   }
 
+  // On a phone there is no room for both panes: a fixed-width list left a
+  // 360px screen a sliver for the note. Below md it is one or the other — the
+  // list, or the open note with a way back to it.
   return (
     <div className="flex gap-4 h-[calc(100vh-14rem)] min-h-[28rem]">
       {/* ── The list ──────────────────────────────────────────────────────── */}
-      <aside className="w-64 flex-shrink-0 flex flex-col bg-surface border border-border rounded-xl overflow-hidden">
+      <aside
+        className={`${open ? 'hidden md:flex' : 'flex'} w-full md:w-64 flex-shrink-0 flex-col bg-surface border border-border rounded-xl overflow-hidden`}
+      >
         <div className="p-2.5 border-b border-border space-y-2">
           {!readOnly && (
             <button
@@ -209,7 +214,9 @@ export function NoteBoard({ project, ownerId, readOnly = false }: NoteBoardProps
       </aside>
 
       {/* ── The note ──────────────────────────────────────────────────────── */}
-      <section className="flex-1 min-w-0 flex flex-col bg-surface border border-border rounded-xl overflow-hidden">
+      <section
+        className={`${open ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col bg-surface border border-border rounded-xl overflow-hidden`}
+      >
         {!open ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
             <FileText size={30} className="text-text-subtle" />
@@ -257,13 +264,22 @@ function NoteView({
   return (
     <div className="flex flex-col h-full min-h-0" style={{ backgroundColor: note.color }}>
       <header className="flex items-center gap-2 px-4 py-2.5 border-b border-black/10">
+        {/* Phones show one pane at a time; this is the way back to the list. */}
+        <button
+          onClick={onClose}
+          title={t('ui_close')}
+          aria-label={t('ui_close')}
+          className="md:hidden -ml-2 p-1.5 rounded text-zinc-600 hover:bg-black/10"
+        >
+          <ChevronLeft size={18} />
+        </button>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onBlur={() => title !== note.title && onChange({ title })}
           readOnly={readOnly}
           placeholder={t('ui_title')}
-          className="flex-1 bg-transparent text-base font-semibold text-zinc-900 placeholder-zinc-500 focus:outline-none"
+          className="flex-1 min-w-0 bg-transparent text-base font-semibold text-zinc-900 placeholder-zinc-500 focus:outline-none"
         />
 
         <button
@@ -322,7 +338,7 @@ function NoteView({
           <Trash2 size={15} />
         </button>
 
-        <button onClick={onClose} title={t('ui_close')} className="p-1.5 rounded text-zinc-600 hover:bg-black/10">
+        <button onClick={onClose} title={t('ui_close')} className="hidden md:block p-1.5 rounded text-zinc-600 hover:bg-black/10">
           <X size={15} />
         </button>
       </header>

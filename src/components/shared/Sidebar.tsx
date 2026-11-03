@@ -366,44 +366,33 @@ export function Sidebar() {
 
       {/* Notifications + language + user */}
       <div className={`border-t border-border py-3 space-y-2 ${mini ? 'px-2' : 'px-3'}`}>
-        {/* The bell lived in the top bar, which is gone. Here it opens
-            upwards and to the right, or it would fall off the bottom of the
-            window from this far down the sidebar. */}
-        <div className={`flex ${mini ? 'justify-center' : 'px-1'}`}>
+        {/* Bell, language and settings as one row of icons, so the footer
+            takes as little height from the tabs above it as it can. On the
+            collapsed rail there is no room across, so they stack. The bell
+            opens upwards and to the right, or it would fall off the bottom of
+            the window from this far down the sidebar. */}
+        <div className={`flex items-center gap-1 ${mini ? 'flex-col' : 'px-1'}`}>
           <NotificationBell panelClass="left-0 bottom-full mb-2" />
+          <button
+            onClick={toggle}
+            className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-surface-2 transition-colors text-xs font-semibold text-text-muted"
+            title={lang === 'en' ? 'Mudar para Português' : 'Switch to English'}
+            aria-label={lang === 'en' ? 'Mudar para Português' : 'Switch to English'}
+          >
+            {/* The language it switches to. Letters, not a flag: Windows
+                draws flag emoji as two bare letters anyway. */}
+            {lang === 'en' ? 'PT' : 'EN'}
+          </button>
+          {/* Each person's own settings: dictation, and their phone widget. */}
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-surface-2 transition-colors"
+            title={t('settings_title')}
+            aria-label={t('settings_title')}
+          >
+            <Settings size={19} className="text-text-muted" />
+          </button>
         </div>
-
-        {/* Language toggle: collapsed, the flag alone carries it. */}
-        <button
-          onClick={toggle}
-          className={`w-full flex items-center rounded-lg hover:bg-surface-2 transition-colors ${
-            mini ? 'justify-center h-9' : 'justify-between px-3 py-2'
-          }`}
-          title={lang === 'en' ? 'Mudar para Português' : 'Switch to English'}
-        >
-          {mini ? (
-            <span className="text-base leading-none">{lang === 'en' ? '🇧🇷' : '🇬🇧'}</span>
-          ) : (
-            <>
-              <span className="text-text-muted text-xs font-medium">{lang === 'en' ? '🇧🇷 Português' : '🇬🇧 English'}</span>
-              <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">
-                {t('lang_switchLabel')}
-              </span>
-            </>
-          )}
-        </button>
-
-        {/* Each person's own settings: dictation, and their phone widget. */}
-        <button
-          onClick={() => setSettingsOpen(true)}
-          className={`w-full flex items-center rounded-lg hover:bg-surface-2 transition-colors ${
-            mini ? 'justify-center h-9' : 'gap-2 px-3 py-2'
-          }`}
-          title={t('settings_title')}
-        >
-          <Settings size={mini ? 15 : 13} className="text-text-muted" />
-          {!mini && <span className="text-text-muted text-xs font-medium">{t('settings_title')}</span>}
-        </button>
 
         {/* User: collapsed, the avatar is the logout button's own tooltip. */}
         {mini ? (

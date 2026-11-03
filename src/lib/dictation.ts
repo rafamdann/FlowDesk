@@ -17,7 +17,11 @@ export interface Shortcut {
   meta: boolean
   alt: boolean
   shift: boolean
-  /** KeyboardEvent.code, so it is the same key whatever the keyboard layout. */
+  /**
+   * KeyboardEvent.code, so it is the same key whatever the keyboard layout.
+   * Empty for modifiers on their own — Ctrl, or Ctrl + Alt — which fire when
+   * they are let go without anything else having been pressed.
+   */
   code: string
 }
 
@@ -31,22 +35,71 @@ export const DEFAULT_SHORTCUT: Shortcut = { ctrl: true, meta: false, alt: false,
 
 export function matchesShortcut(e: KeyboardEvent, s: Shortcut) {
   return (
-    e.code === s.code && e.ctrlKey === s.ctrl && e.metaKey === s.meta && e.altKey === s.alt && e.shiftKey === s.shift
+    !!s.code && e.code === s.code && e.ctrlKey === s.ctrl && e.metaKey === s.meta && e.altKey === s.alt && e.shiftKey === s.shift
   )
 }
 
-const MODIFIER_CODES = /^(Control|Meta|Alt|Shift|OS)(Left|Right)?$/
+export const sameShortcut = (a: Shortcut, b: Shortcut) =>
+  a.code === b.code && a.ctrl === b.ctrl && a.meta === b.meta && a.alt === b.alt && a.shift === b.shift
+
+const MODIFIER_CODES = /^(Control|Meta|Alt|Shift|OS|AltGraph)(Left|Right)?$/
+
+/** Keys nobody types into a text box, so they work on their own. */
+const LONE_KEYS = /^(F\d+|Insert|Pause|ScrollLock|ContextMenu|PrintScreen|Help|Media\w*|Audio\w*|Launch\w*|Browser\w*)$/
 
 /**
  * The shortcut a key press describes, or null while only modifiers are held.
- * Needs a modifier, or it would fire on ordinary typing — except the F keys,
- * which nobody types.
+ * Anything with Ctrl, Alt or Cmd, and the keys nobody types. Not a plain
+ * letter, space or Shift + letter: those would fire on ordinary typing, and
+ * that letter could never be typed again.
  */
 export function shortcutFromEvent(e: KeyboardEvent): Shortcut | null {
   if (MODIFIER_CODES.test(e.code)) return null
   const s = { ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey, code: e.code }
-  if (!s.ctrl && !s.meta && !s.alt && !/^F\d+$/.test(e.code)) return null
+  if (!s.ctrl && !s.meta && !s.alt && !LONE_KEYS.test(e.code)) return null
   return s
+}
+
+/**
+ * Notices modifiers pressed and let go on their own — Ctrl, or Ctrl + Alt —
+ * with nothing else pressed in between. Fed every keydown and keyup (and told
+ * about clicks, since Ctrl + click is not a tap of Ctrl); `up` hands back the
+ * chord once the last modifier is released.
+ */
+export function chordTracker() {
+  let peak = { ctrl: false, meta: false, alt: false, shift: false }
+  let spoiled = false
+  const reset = () => {
+    peak = { ctrl: false, meta: false, alt: false, shift: false }
+    spoiled = false
+  }
+  return {
+    down(e: KeyboardEvent) {
+      if (!MODIFIER_CODES.test(e.code)) {
+        spoiled = true
+        return
+      }
+      peak = {
+        ctrl: peak.ctrl || e.ctrlKey,
+        meta: peak.meta || e.metaKey,
+        alt: peak.alt || e.altKey,
+        shift: peak.shift || e.shiftKey,
+      }
+    },
+    up(e: KeyboardEvent): Shortcut | null {
+      if (!MODIFIER_CODES.test(e.code)) return null
+      // Others still held: the chord is not finished.
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return null
+      const any = peak.ctrl || peak.meta || peak.alt || peak.shift
+      const chord = any && !spoiled ? { ...peak, code: '' } : null
+      reset()
+      return chord
+    },
+    spoil() {
+      spoiled = true
+    },
+    reset,
+  }
 }
 
 function keyName(code: string) {
@@ -57,9 +110,9 @@ function keyName(code: string) {
 
 export function formatShortcut(s: Shortcut) {
   if (isMac) {
-    return `${s.ctrl ? '⌃' : ''}${s.alt ? '⌥' : ''}${s.shift ? '⇧' : ''}${s.meta ? '⌘' : ''}${keyName(s.code)}`
+    return `${s.ctrl ? '⌃' : ''}${s.alt ? '⌥' : ''}${s.shift ? '⇧' : ''}${s.meta ? '⌘' : ''}${s.code ? keyName(s.code) : ''}`
   }
-  return [s.ctrl && 'Ctrl', s.alt && 'Alt', s.shift && 'Shift', s.meta && 'Win', keyName(s.code)]
+  return [s.ctrl && 'Ctrl', s.alt && 'Alt', s.shift && 'Shift', s.meta && 'Win', s.code && keyName(s.code)]
     .filter(Boolean)
     .join(' + ')
 }
