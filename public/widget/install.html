@@ -111,30 +111,32 @@
       log: [
         'Abra a aplicação <b>Atalhos</b> e toque em <b>+</b>.',
         'Adicione <b>Pedir entrada</b>. Em Pergunta escreva: <code>O que fez, e quanto tempo?</code>',
-        'Adicione <b>Run Script</b> (do Scriptable). Script: <b>FlowDesk</b>. Em Parameter escreva <code>log: </code> e toque em <b>Entrada fornecida</b> por cima do teclado. Toque em <b>Mostrar mais</b> e desligue <b>Run In App</b> e <b>Show When Run</b> — com este ligado fica uma janela aberta depois de Concluído.',
+        'Adicione <b>Texto</b>. Escreva <code>log: </code> e toque em <b>Entrada fornecida</b> por cima do teclado.',
+        'Procure <b>Scriptable</b> e adicione o primeiro <b>Run Script</b>. Fica “Run <b>Script</b> with <b>Texto</b>”: toque em Script e escolha <b>FlowDesk</b>. Toque na seta e desligue <b>Run In App</b> e <b>Show When Run</b>.',
         'Adicione <b>Refresh All Widgets</b> (do Scriptable), para o widget mostrar logo a mudança.',
-        'Adicione <b>Mostrar notificação</b> e ponha nela o resultado do Run Script. É um aviso que desaparece sozinho (não use Mostrar resultado, que espera por um toque).',
+        'Adicione <b>Mostrar notificação</b> e ponha nela o resultado do Run Script. Desaparece sozinha (não use Mostrar resultado, que espera por um toque).',
         'Toque no nome lá em cima e chame-lhe <code>Registar trabalho</code>.',
-        'Ao usar, escreva o que fez e o tempo no fim: <code>Chamada com cliente 45</code> ou <code>Edição 1h30</code>. Para falar em vez de escrever, toque no microfone do teclado.'
+        'Ao usar, escreva o que fez e o tempo no fim: <code>Chamada com cliente 45</code> ou <code>Edição 1h30</code>. Para falar, toque no microfone do teclado.'
       ],
       voiceTitle: 'Botão “Registar por voz” — sem teclado',
       voice: [
         'Nos Atalhos, toque em <b>+</b>.',
         'Adicione <b>Ditar texto</b>. Idioma: <b>Português</b>. Parar de ouvir: <b>Após pausa</b>.',
-        'Adicione <b>Run Script</b>. Script: <b>FlowDesk</b>. Em Parameter escreva <code>log: </code> e toque em <b>Texto ditado</b>. Desligue <b>Run In App</b> e <b>Show When Run</b>.',
-        'Adicione <b>Refresh All Widgets</b> (do Scriptable).',
-        'Adicione <b>Mostrar notificação</b> com o resultado do Run Script.',
+        'Adicione <b>Texto</b>. Escreva <code>log: </code> e toque em <b>Texto ditado</b>.',
+        'Adicione <b>Run Script</b> com Script <b>FlowDesk</b> e, em “with”, o <b>Texto</b>. Desligue <b>Run In App</b> e <b>Show When Run</b>.',
+        'Adicione <b>Refresh All Widgets</b> e depois <b>Mostrar notificação</b> com o resultado do Run Script.',
         'Chame-lhe <code>Registar por voz</code>.',
-        'Ao usar: toque, diga por exemplo “Chamada com a Dinamene, vinte minutos” e pare de falar. Guarda-se sozinho. Os nomes do dicionário da equipa são corrigidos.'
+        'Ao usar: toque, diga por exemplo “Chamada com a Dinamene, vinte minutos” e pare de falar. Guarda-se sozinho, e os nomes do dicionário da equipa são corrigidos.'
       ],
       tickTitle: 'Botão “Marcar tarefa”',
       tick: [
         'Nos Atalhos, toque em <b>+</b>.',
-        'Adicione <b>Run Script</b>. Script: <b>FlowDesk</b>. Parameter: <code>todos</code>. Desligue <b>Run In App</b> e <b>Show When Run</b>.',
+        'Adicione <b>Texto</b> e escreva <code>todos</code>.',
+        'Adicione <b>Run Script</b> com Script <b>FlowDesk</b> e, em “with”, esse <b>Texto</b>. Desligue <b>Run In App</b> e <b>Show When Run</b>.',
         'Adicione <b>Escolher da lista</b>. Pergunta: <code>Qual está feita?</code>',
-        'Adicione outro <b>Run Script</b>. Script: <b>FlowDesk</b>. Em Parameter escreva <code>tick: </code> e toque em <b>Item escolhido</b>. Desligue <b>Run In App</b> e <b>Show When Run</b>.',
-        'Adicione <b>Refresh All Widgets</b> (do Scriptable), para a tarefa sair logo do widget.',
-        'Adicione <b>Mostrar notificação</b> com o resultado desse Run Script.',
+        'Adicione outro <b>Texto</b>. Escreva <code>tick: </code> e toque em <b>Item escolhido</b>.',
+        'Adicione outro <b>Run Script</b> com <b>FlowDesk</b> e, em “with”, este último <b>Texto</b>. Desligue <b>Run In App</b> e <b>Show When Run</b>.',
+        'Adicione <b>Refresh All Widgets</b> e depois <b>Mostrar notificação</b> com o resultado desse Run Script.',
         'Chame-lhe <code>Marcar tarefa</code>.'
       ],
       placeTitle: 'Pô-los no ecrã principal',
@@ -151,30 +153,32 @@
       log: [
         'Open the <b>Shortcuts</b> app and tap <b>+</b>.',
         'Add <b>Ask for Input</b>. In Prompt write: <code>What did you do, and how long?</code>',
-        'Add <b>Run Script</b> (from Scriptable). Script: <b>FlowDesk</b>. In Parameter type <code>log: </code> then tap <b>Provided Input</b> above the keyboard. Tap <b>Show More</b> and turn off both <b>Run In App</b> and <b>Show When Run</b> — with that one on, a window stays open after Done.',
+        'Add <b>Text</b>. Type <code>log: </code> then tap <b>Provided Input</b> above the keyboard.',
+        'Search <b>Scriptable</b> and add the first <b>Run Script</b>. It reads “Run <b>Script</b> with <b>Text</b>”: tap Script and choose <b>FlowDesk</b>. Tap the arrow and turn off <b>Run In App</b> and <b>Show When Run</b>.',
         'Add <b>Refresh All Widgets</b> (from Scriptable), so the widget shows the change straight away.',
-        'Add <b>Show Notification</b> and put the Run Script result in it. It is a banner that goes away by itself (not Show Result, which waits for a tap).',
+        'Add <b>Show Notification</b> and put the Run Script result in it. It goes away by itself (not Show Result, which waits for a tap).',
         'Tap the name at the top and call it <code>Log work</code>.',
-        'When you use it, type what you did with the time at the end: <code>Client call 45</code> or <code>Editing 1h30</code>. To speak instead of typing, tap the mic on the keyboard.'
+        'When you use it, type what you did with the time at the end: <code>Client call 45</code> or <code>Editing 1h30</code>. To speak, tap the mic on the keyboard.'
       ],
       voiceTitle: '“Log by voice” button — no keyboard',
       voice: [
         'In Shortcuts, tap <b>+</b>.',
         'Add <b>Dictate Text</b>. Language: <b>English</b> (or Portuguese). Stop Listening: <b>After Pause</b>.',
-        'Add <b>Run Script</b>. Script: <b>FlowDesk</b>. In Parameter type <code>log: </code> then tap <b>Dictated Text</b>. Turn off <b>Run In App</b> and <b>Show When Run</b>.',
-        'Add <b>Refresh All Widgets</b> (from Scriptable).',
-        'Add <b>Show Notification</b> with the Run Script result.',
+        'Add <b>Text</b>. Type <code>log: </code> then tap <b>Dictated Text</b>.',
+        'Add <b>Run Script</b> with Script <b>FlowDesk</b> and the <b>Text</b> in “with”. Turn off <b>Run In App</b> and <b>Show When Run</b>.',
+        'Add <b>Refresh All Widgets</b>, then <b>Show Notification</b> with the Run Script result.',
         'Call it <code>Log by voice</code>.',
-        'To use it: tap, say something like “Call with Dinamene, twenty minutes”, and stop talking. It saves itself. Names in the team dictionary are put right.'
+        'To use it: tap, say something like “Call with Dinamene, twenty minutes”, and stop talking. It saves itself, and names in the team dictionary are put right.'
       ],
       tickTitle: '“Tick off” button',
       tick: [
         'In Shortcuts, tap <b>+</b>.',
-        'Add <b>Run Script</b>. Script: <b>FlowDesk</b>. Parameter: <code>todos</code>. Turn off <b>Run In App</b> and <b>Show When Run</b>.',
+        'Add <b>Text</b> and type <code>todos</code>.',
+        'Add <b>Run Script</b> with Script <b>FlowDesk</b> and that <b>Text</b> in “with”. Turn off <b>Run In App</b> and <b>Show When Run</b>.',
         'Add <b>Choose from List</b>. Prompt: <code>Which one is done?</code>',
-        'Add another <b>Run Script</b>. Script: <b>FlowDesk</b>. In Parameter type <code>tick: </code> then tap <b>Chosen Item</b>. Turn off <b>Run In App</b> and <b>Show When Run</b>.',
-        'Add <b>Refresh All Widgets</b> (from Scriptable), so the to-do leaves the widget at once.',
-        'Add <b>Show Notification</b> with that Run Script’s result.',
+        'Add another <b>Text</b>. Type <code>tick: </code> then tap <b>Chosen Item</b>.',
+        'Add another <b>Run Script</b> with <b>FlowDesk</b> and this last <b>Text</b> in “with”. Turn off <b>Run In App</b> and <b>Show When Run</b>.',
+        'Add <b>Refresh All Widgets</b>, then <b>Show Notification</b> with that Run Script’s result.',
         'Call it <code>Tick off</code>.'
       ],
       placeTitle: 'Put them on your home screen',
