@@ -8,6 +8,7 @@ import {
 import { useAuthStore } from './authStore'
 import { recordUndo } from './undoStore'
 import { format } from 'date-fns'
+import { toTask, toCompletionLog } from './taskRows'
 
 interface TaskState {
   /** Tasks of the project being viewed, or all when unscoped. */
@@ -96,28 +97,6 @@ interface TaskState {
   getTasksDueThisMonth: (employeeId: string, month: number, year: number) => Record<number, Task[]>
 }
 
-function toTask(row: any): Task {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    title: row.title,
-    description: row.description,
-    assignedTo: (row.task_assignments ?? []).map((a: any) => a.employee_id),
-    frequency: row.frequency,
-    categoryId: row.category_id,
-    isUrgent: !!row.is_urgent,
-    associatedTool: row.associated_tool ?? undefined,
-    estimatedMinutes: row.estimated_minutes,
-    createdAt: row.created_at,
-    createdBy: row.created_by,
-    isActive: row.is_active,
-    // Read from '*', so it is simply absent until its migration has run.
-    content: row.content_kind
-      ? { kind: row.content_kind, id: row.content_id, clientId: row.content_client_id ?? null }
-      : undefined,
-  }
-}
-
 function toTaskFile(row: any): TaskFile {
   return {
     id: row.id,
@@ -129,18 +108,6 @@ function toTaskFile(row: any): TaskFile {
     storagePath: row.storage_path,
     uploadedAt: row.uploaded_at,
     uploadedBy: row.uploaded_by,
-  }
-}
-
-function toCompletionLog(row: any): CompletionLog {
-  return {
-    id: row.id,
-    taskId: row.task_id,
-    employeeId: row.employee_id,
-    completedAt: row.completed_at,
-    dueDate: row.due_date,
-    wasLate: row.was_late,
-    timeOfDay: row.time_of_day,
   }
 }
 

@@ -1,0 +1,120 @@
+<!doctype html>
+<!--
+  How to put FlowDesk on an iPhone home screen. Opened on the phone itself,
+  so the script can be copied and pasted straight into Scriptable. The script
+  is only a loader: the widget is /widget/flowdesk-widget.js, built from
+  src/widget/flowdeskWidget.ts on every deploy.
+-->
+<html lang="en" translate="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="only light" />
+  <title>FlowDesk widget</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <style>
+    :root { --ink: #18170F; --muted: #6B6960; --bg: #F5F4EF; --card: #FFFFFF; --line: rgba(0,0,0,0.08); --green: #1A5C3A; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 -apple-system, system-ui, sans-serif; }
+    main { max-width: 560px; margin: 0 auto; padding: 28px 16px 48px; }
+    h1 { font-size: 24px; margin: 0 0 4px; }
+    .lead { color: var(--muted); margin: 0 0 24px; }
+    ol { list-style: none; counter-reset: step; padding: 0; margin: 0; }
+    li { counter-increment: step; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 16px 16px 56px; margin-bottom: 12px; position: relative; }
+    li::before { content: counter(step); position: absolute; left: 16px; top: 16px; width: 26px; height: 26px; border-radius: 50%; background: var(--green); color: #fff; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+    li b { display: block; margin-bottom: 2px; }
+    li p { margin: 0; color: var(--muted); font-size: 15px; }
+    button { margin-top: 12px; width: 100%; padding: 14px; border: 0; border-radius: 12px; background: var(--green); color: #fff; font: inherit; font-weight: 600; }
+    button.done { background: #2F7A4F; }
+    pre { margin: 12px 0 0; padding: 12px; background: var(--bg); border-radius: 10px; font-size: 11px; line-height: 1.45; overflow-x: auto; white-space: pre; color: var(--muted); }
+    a { color: var(--green); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 data-t="title"></h1>
+    <p class="lead" data-t="lead"></p>
+    <ol>
+      <li><b data-t="s1"></b><p data-t="s1p"></p></li>
+      <li>
+        <b data-t="s2"></b><p data-t="s2p"></p>
+        <button id="copy" type="button" data-t="copy"></button>
+        <pre id="script"></pre>
+      </li>
+      <li><b data-t="s3"></b><p data-t="s3p"></p></li>
+      <li><b data-t="s4"></b><p data-t="s4p"></p></li>
+      <li><b data-t="s5"></b><p data-t="s5p"></p></li>
+    </ol>
+  </main>
+  <script>
+    var pt = /^pt/i.test(navigator.language)
+    var T = pt ? {
+      title: 'FlowDesk no ecrã principal',
+      lead: 'As tarefas de hoje num widget do iPhone, sempre atualizadas.',
+      s1: 'Instale o Scriptable',
+      s1p: 'É grátis, na App Store. É ele que mostra o widget.',
+      s2: 'Copie o script',
+      s2p: 'Abra esta página no iPhone e toque no botão.',
+      copy: 'Copiar o script', copied: 'Copiado ✓',
+      s3: 'Cole-o no Scriptable',
+      s3p: 'Abra o Scriptable, toque em + no canto superior direito e cole. Toque no título “Untitled Script” e chame-lhe FlowDesk. Toque em Done.',
+      s4: 'Corra-o uma vez e entre',
+      s4p: 'Toque no script FlowDesk. Entre com o email e a palavra-passe do FlowDesk. Aparece uma pré-visualização.',
+      s5: 'Adicione o widget',
+      s5p: 'No ecrã principal, mantenha o dedo num espaço vazio → Editar → Adicionar widget → Scriptable → escolha o tamanho → Adicionar. Depois mantenha o dedo no widget → Editar widget → Script: FlowDesk.'
+    } : {
+      title: 'FlowDesk on your home screen',
+      lead: 'Today’s tasks in an iPhone widget, kept up to date.',
+      s1: 'Install Scriptable',
+      s1p: 'Free, on the App Store. It is what shows the widget.',
+      s2: 'Copy the script',
+      s2p: 'Open this page on your iPhone and tap the button.',
+      copy: 'Copy the script', copied: 'Copied ✓',
+      s3: 'Paste it into Scriptable',
+      s3p: 'Open Scriptable, tap + at the top right and paste. Tap the “Untitled Script” title and call it FlowDesk. Tap Done.',
+      s4: 'Run it once and sign in',
+      s4p: 'Tap the FlowDesk script. Sign in with your FlowDesk email and password. A preview appears.',
+      s5: 'Add the widget',
+      s5p: 'On your home screen, press and hold an empty spot → Edit → Add Widget → Scriptable → pick a size → Add Widget. Then press and hold the widget → Edit Widget → Script: FlowDesk.'
+    }
+    if (pt) document.documentElement.lang = 'pt'
+    document.querySelectorAll('[data-t]').forEach(function (el) { el.textContent = T[el.getAttribute('data-t')] })
+
+    // The loader. Kept tiny on purpose: everything else is downloaded from
+    // FlowDesk each time the widget refreshes, so it never needs pasting again.
+    var script = [
+      '// FlowDesk: today’s tasks on your home screen.',
+      '// Leave this as it is. The widget itself is downloaded from FlowDesk',
+      '// each time it refreshes, so it keeps itself up to date.',
+      "const APP = '" + location.origin + "'",
+      'const fm = FileManager.local()',
+      "const file = fm.joinPath(fm.libraryDirectory(), 'flowdesk-widget.js')",
+      'try {',
+      "  const code = await new Request(APP + '/widget/flowdesk-widget.js').loadString()",
+      "  if (code.includes('flowdesk.widget.session')) fm.writeString(file, code)",
+      '} catch (e) {}',
+      "if (!fm.fileExists(file)) throw new Error('Could not reach FlowDesk. Check the connection and try again.')",
+      'await importModule(file)(APP)',
+      ''
+    ].join('\n')
+    document.getElementById('script').textContent = script
+
+    var btn = document.getElementById('copy')
+    btn.addEventListener('click', function () {
+      var done = function () { btn.textContent = T.copied; btn.className = 'done' }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(script).then(done, fallback)
+      } else fallback()
+      function fallback() {
+        var area = document.createElement('textarea')
+        area.value = script
+        document.body.appendChild(area)
+        area.select()
+        document.execCommand('copy')
+        document.body.removeChild(area)
+        done()
+      }
+    })
+  </script>
+</body>
+</html>
