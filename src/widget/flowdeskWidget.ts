@@ -8,11 +8,18 @@
  * time the widget refreshes — so a change here reaches every phone on the
  * next deploy, with nobody pasting anything again.
  *
- * What it shows is each person's own choice, made in FlowDesk (Settings →
- * Widget) and stored in widget_settings: today's tasks, their to-dos, their
- * work log, their notes, in any combination. A widget's Parameter field in
- * Scriptable overrides it for that one widget ("notes", "todos worklog"), so
- * one person can keep several widgets showing different things.
+ * Each widget shows one thing, each person's own choice made in FlowDesk
+ * (Settings → Widget) and stored in widget_settings: today's tasks, their
+ * to-dos, their work log or their notes. A widget's Parameter field in
+ * Scriptable overrides it for that one widget ("notes"), so one person can
+ * keep several widgets showing different things.
+ *
+ * iOS widgets cannot be ticked or typed into — Apple allows neither outside
+ * a native app, and typing not even there. What can act without opening
+ * anything is a Shortcuts button on the home screen, so this also answers
+ * Scriptable's "Run Script" action from Shortcuts: `todos` lists the open
+ * to-dos for a Choose from List, `tick: <title>` ticks one off, and
+ * `log: <what> <minutes>` adds to the work log. See install.html.
  *
  * Today's tasks come from the app's own scheduler on the person's own rows,
  * signed in as them: the widget can never disagree with My Tasks about what
@@ -76,6 +83,15 @@ const STRINGS = {
     preview: 'Preview the widget',
     openApp: 'Open FlowDesk',
     signOut: 'Sign out',
+    nothingToDo: 'Nothing to do',
+    ticked: (x: string) => `Done: ${x}`,
+    tickNotFound: (x: string) => `“${x}” is not on your to-do list any more.`,
+    logged: (x: string, m: string) => `Logged: ${x} (${m})`,
+    needTitle: 'Say what you did.',
+    needMinutes: 'Add how long it took at the end, e.g. “Client call 45” or “Editing 1h30”.',
+    noProject: 'There is no project to log this in.',
+    notSignedIn: 'Not signed in. Open Scriptable and run FlowDesk once.',
+    unknown: 'FlowDesk did not understand that. Use todos, tick: … or log: …',
   },
   pt: {
     titles: { tasks: 'Hoje', todos: 'Tarefas', worklog: 'Registo', notes: 'Notas' } as Record<WidgetSection, string>,
@@ -98,6 +114,15 @@ const STRINGS = {
     preview: 'Pré-visualizar o widget',
     openApp: 'Abrir o FlowDesk',
     signOut: 'Terminar sessão',
+    nothingToDo: 'Nada a fazer',
+    ticked: (x: string) => `Feito: ${x}`,
+    tickNotFound: (x: string) => `“${x}” já não está na sua lista.`,
+    logged: (x: string, m: string) => `Registado: ${x} (${m})`,
+    needTitle: 'Diga o que fez.',
+    needMinutes: 'Diga no fim quanto tempo demorou, por exemplo “Chamada com cliente 45” ou “Edição 1h30”.',
+    noProject: 'Não há nenhum projeto onde registar isto.',
+    notSignedIn: 'Sem sessão. Abra o Scriptable e corra o FlowDesk uma vez.',
+    unknown: 'O FlowDesk não percebeu. Use todos, tick: … ou log: …',
   },
 }
 type Strings = (typeof STRINGS)['en']
@@ -302,12 +327,19 @@ async function loadTasks(session: Session, p: Person, t: Strings, app: string): 
   }
 }
 
-async function loadTodos(session: Session, p: Person, t: Strings, app: string): Promise<Section> {
+/** Their open to-dos, urgent and due first: what the widget lists and a shortcut picks from. */
+async function openTodos(session: Session, p: Person): Promise<any[]> {
   const day = today()
-  const todos = (await rows(session, 'project_todos', `select=*&${ownerFilter(p)}&is_completed=eq.false&order=sort_order`))
+  const todos = await rows(session, 'project_todos', `select=*&${ownerFilter(p)}&is_completed=eq.false&order=sort_order`)
   // Urgent, then anything due by today, then by date, then as listed.
   const rank = (r: any) => (r.is_urgent ? 0 : r.do_date && r.do_date <= day ? 1 : r.do_date ? 2 : 3)
   todos.sort((a, b) => rank(a) - rank(b) || String(a.do_date ?? '').localeCompare(String(b.do_date ?? '')))
+  return todos
+}
+
+async function loadTodos(session: Session, p: Person, t: Strings, app: string): Promise<Section> {
+  const day = today()
+  const todos = await openTodos(session, p)
   return {
     key: 'todos',
     summary: todos.length ? t.left(todos.length) : '',
@@ -459,44 +491,14 @@ function drawSection(container: any, s: Section, t: Strings, accent: any, max: n
   if (shown.length < s.rows.length) message(container, t.more(s.rows.length - shown.length), compact ? 10 : 11)
 }
 
-/**
- * Small: the first section. Medium: one section, or the first two side by
- * side. Large: every section, one under the other, sharing the rows.
- */
-function drawWidget(widget: any, sections: Section[], t: Strings, color: string, app: string, family: string) {
-  const accent = new Color(color)
+/** One section filling the widget, as many rows as its size has room for. */
+function drawWidget(widget: any, section: Section, t: Strings, color: string, family: string) {
   widget.backgroundColor = Color.dynamic(new Color('#F5F4EF'), new Color('#1C1B17'))
   widget.setPadding(12, 14, 12, 14)
-  widget.url = sections[0]?.url ?? app
+  widget.url = section.url
   widget.refreshAfterDate = new Date(Date.now() + REFRESH_MIN * 60 * 1000)
-
-  if (family === 'small') {
-    drawSection(widget, sections[0], t, accent, 4, true)
-  } else if (family === 'medium') {
-    if (sections.length === 1) drawSection(widget, sections[0], t, accent, 5, false)
-    else {
-      const columns = widget.addStack()
-      columns.layoutHorizontally()
-      columns.spacing = 14
-      // Fixed widths, or a column of long titles takes the whole widget. A
-      // medium widget is the screen less about 26pt each side.
-      const width = Math.floor((Device.screenSize().width - 52 - 28 - 14) / 2)
-      sections.slice(0, 2).forEach((s) => {
-        const col = columns.addStack()
-        col.layoutVertically()
-        col.size = new Size(width, 0)
-        drawSection(col, s, t, accent, 5, true)
-        col.addSpacer()
-      })
-    }
-  } else {
-    const budget = family === 'extraLarge' ? 14 : 12
-    const each = Math.max(2, Math.floor(budget / sections.length))
-    sections.forEach((s, i) => {
-      if (i > 0) widget.addSpacer(8)
-      drawSection(widget, s, t, accent, each, sections.length > 2)
-    })
-  }
+  const rowsFor: Record<string, number> = { small: 4, medium: 5, large: 12, extraLarge: 14 }
+  drawSection(widget, section, t, new Color(color), rowsFor[family] ?? 5, family === 'small')
   widget.addSpacer()
 }
 
@@ -525,9 +527,106 @@ function drawLockScreen(widget: any, s: Section, t: Strings) {
   }
 }
 
+// ─── Acting from Shortcuts ──────────────────────────────────────────────────
+
+/** Sends a write and hands back the rows it touched; RLS refusing shows as none. */
+async function write(session: Session, method: 'POST' | 'PATCH', path: string, body: object): Promise<any[]> {
+  const req = new Request(`${SUPABASE_URL}/rest/v1/${path}`)
+  req.method = method
+  req.headers = {
+    apikey: ANON_KEY,
+    Authorization: `Bearer ${session.access}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  }
+  req.body = JSON.stringify(body)
+  const data = await req.loadJSON()
+  if (!Array.isArray(data)) throw new Error(data?.message || 'not saved')
+  return data
+}
+
+/** Done, as the app does it: completed now, and no longer waiting on anyone. */
+async function tick(session: Session, p: Person, t: Strings, title: string): Promise<string> {
+  const todo = (await openTodos(session, p)).find((r) => String(r.title ?? '').trim() === title.trim())
+  if (!todo) return t.tickNotFound(title)
+  const done = { is_completed: true, completed_at: new Date().toISOString() }
+  let changed: any[]
+  try {
+    changed = await write(session, 'PATCH', `project_todos?id=eq.${todo.id}`, { ...done, waiting_since: null })
+  } catch {
+    // waiting_since arrives with its own migration; completing must not wait for it.
+    changed = await write(session, 'PATCH', `project_todos?id=eq.${todo.id}`, done)
+  }
+  if (changed.length === 0) throw new Error('not allowed')
+  return t.ticked(todo.title)
+}
+
+/**
+ * "Client call 45", "Editing 1h30", "Reels 2h": what was done, then how long.
+ * Minutes are required, as in the app — a log without time cannot answer
+ * the one question it exists for.
+ */
+function parseLog(text: string): { title: string; minutes: number | null } {
+  const unit = '(?:m|min|mins|minutes|minutos)?'
+  const hours = new RegExp(`^(.*?)[\\s,·-]*(\\d+)\\s*h(?:rs?|ours?|oras?)?\\s*(?:(\\d+)\\s*${unit})?\\s*$`, 'i').exec(text)
+  if (hours && hours[1].trim()) return { title: hours[1].trim(), minutes: Number(hours[2]) * 60 + Number(hours[3] ?? 0) }
+  const mins = new RegExp(`^(.*?)[\\s,·-]+(\\d+)\\s*${unit}\\s*$`, 'i').exec(text)
+  if (mins) return { title: mins[1].trim(), minutes: Number(mins[2]) }
+  return { title: text.trim(), minutes: null }
+}
+
+async function logWork(session: Session, p: Person, t: Strings, text: string): Promise<string> {
+  const { title, minutes } = parseLog(text)
+  if (!title) return t.needTitle
+  if (!minutes || minutes <= 0) return t.needMinutes
+  // An employee's work goes on the project they are on, as in the app; the
+  // owner's, on the project they last logged work for.
+  const [me] = await rows(session, 'users', `select=*&id=eq.${p.id}`, true)
+  let projectId: string | null = me?.project_id ?? null
+  if (!projectId) {
+    const [last] = await rows(session, 'work_log_entries', `select=project_id&author_id=eq.${p.id}&order=created_at.desc`, true, 1)
+    projectId = last?.project_id ?? null
+  }
+  if (!projectId) return t.noProject
+  await write(session, 'POST', 'work_log_entries', {
+    project_id: projectId,
+    author_id: p.id,
+    worked_on: today(),
+    title,
+    description: '',
+    minutes,
+  })
+  return t.logged(title, duration(minutes))
+}
+
+/** What a shortcut asked for: the Run Script action's Parameter, or else its Texts. */
+function shortcutRequest(): string | null {
+  if (typeof args === 'undefined') return null
+  const value = args.shortcutParameter ?? (Array.isArray(args.plainTexts) ? args.plainTexts[0] : null)
+  return value == null || String(value).trim() === '' ? null : String(value).trim()
+}
+
+async function answerShortcut(request: string, session: Session | null, t: Strings): Promise<unknown> {
+  if (!session) return t.notSignedIn
+  const { person } = await loadPerson(session)
+  const [, verb, rest = ''] = /^(\w+)\s*:?\s*([\s\S]*)$/.exec(request) ?? []
+  switch ((verb ?? '').toLowerCase()) {
+    case 'todos': {
+      const titles = (await openTodos(session, person)).map((r) => String(r.title ?? '').trim()).filter(Boolean)
+      return titles.length ? titles : [t.nothingToDo]
+    }
+    case 'tick':
+      return rest.trim() === t.nothingToDo ? t.nothingToDo : tick(session, person, t, rest)
+    case 'log':
+      return logWork(session, person, t, rest)
+    default:
+      return t.unknown
+  }
+}
+
 // ─── Running ────────────────────────────────────────────────────────────────
 
-async function loadPerson(session: Session): Promise<{ person: Person; sections: WidgetSection[] }> {
+async function loadPerson(session: Session): Promise<{ person: Person; section: WidgetSection }> {
   const me = session.userId
   const [profile, settings] = await Promise.all([
     // '*' rather than naming columns: a column whose migration has not run
@@ -539,8 +638,9 @@ async function loadPerson(session: Session): Promise<{ person: Person; sections:
   const color = isHexColor(u.calendar_color) ? u.calendar_color : defaultColor(me)
   // This widget's own Parameter, if it has one, wins over the saved choice.
   const param = typeof args !== 'undefined' ? args.widgetParameter : null
-  const sections = cleanSections(param || settings[0]?.sections)
-  return { person: { id: me, isOwner: !!u.is_owner || u.role === 'admin', color }, sections }
+  // One per widget: a widget is too small to be a dashboard.
+  const section = cleanSections(param || settings[0]?.sections)[0]
+  return { person: { id: me, isOwner: !!u.is_owner || u.role === 'admin', color }, section }
 }
 
 /**
@@ -550,11 +650,22 @@ async function loadPerson(session: Session): Promise<{ person: Person; sections:
 async function run(appUrl: string) {
   const t: Strings = String(Device.language()).startsWith('pt') ? STRINGS.pt : STRINGS.en
   const widget = new ListWidget()
-  // Run by hand there is no family: the preview is large, so it shows
-  // everything they picked.
-  const family = String(config.widgetFamily ?? (config.runsInWidget ? 'medium' : 'large'))
+  const family = String(config.widgetFamily ?? 'medium')
 
   let session = await currentSession()
+
+  // Asked by a Shortcuts button: act, answer, and show nothing of our own.
+  const request = config.runsInWidget ? null : shortcutRequest()
+  if (request) {
+    let answer: unknown
+    try {
+      answer = await answerShortcut(request, session, t)
+    } catch (err) {
+      answer = `${t.offline}: ${String((err as Error)?.message ?? err)}`
+    }
+    Script.setShortcutOutput(answer)
+    return Script.complete()
+  }
 
   // Run by hand inside Scriptable: sign in, or offer the little menu.
   if (!config.runsInWidget) {
@@ -586,12 +697,10 @@ async function run(appUrl: string) {
     message(widget, t.signedOut)
   } else {
     try {
-      const { person, sections: wanted } = await loadPerson(session)
-      // Only what this size can show is fetched.
-      const fits = family === 'small' || family.startsWith('accessory') ? 1 : family === 'medium' ? 2 : 4
-      const sections = await Promise.all(wanted.slice(0, fits).map((k) => LOADERS[k](session!, person, t, appUrl)))
-      if (family.startsWith('accessory')) drawLockScreen(widget, sections[0], t)
-      else drawWidget(widget, sections, t, person.color, appUrl, family)
+      const { person, section: key } = await loadPerson(session)
+      const section = await LOADERS[key](session, person, t, appUrl)
+      if (family.startsWith('accessory')) drawLockScreen(widget, section, t)
+      else drawWidget(widget, section, t, person.color, family)
     } catch (err) {
       message(widget, `${t.offline}: ${String((err as Error)?.message ?? err)}`)
       widget.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000)
@@ -599,7 +708,7 @@ async function run(appUrl: string) {
   }
 
   if (config.runsInWidget) Script.setWidget(widget)
-  else await (family === 'large' ? widget.presentLarge() : widget.presentMedium())
+  else await widget.presentMedium()
   Script.complete()
 }
 

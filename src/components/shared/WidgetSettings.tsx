@@ -38,14 +38,11 @@ export function WidgetSettings() {
       })
   }, [me])
 
-  const toggle = async (key: WidgetSection) => {
-    if (!me) return
-    const on = sections.includes(key)
-    // Never none: an empty widget is not a choice anyone means to make.
-    if (on && sections.length === 1) return
-    // Kept in the fixed order, so the widget's layout does not depend on the
-    // order things were ticked in.
-    const next = WIDGET_SECTIONS.filter((s) => (s === key ? !on : sections.includes(s)))
+  // One thing per widget: four at once was a dashboard squeezed into a
+  // square. Another widget, with its own Parameter, shows something else.
+  const choose = async (key: WidgetSection) => {
+    if (!me || sections[0] === key) return
+    const next = [key]
     setSections(next)
     const { error } = await supabase
       .from('widget_settings')
@@ -68,16 +65,17 @@ export function WidgetSettings() {
     <>
       <p className="text-text-muted text-xs mb-4">{t('widget_intro')}</p>
 
-      <ul className="space-y-2 mb-3">
+      <ul className="space-y-2 mb-3" role="radiogroup">
         {WIDGET_SECTIONS.map((key) => {
-          const on = sections.includes(key)
+          const on = sections[0] === key
           const Icon = ICONS[key]
           return (
             <li key={key}>
               <button
                 type="button"
-                onClick={() => toggle(key)}
-                aria-pressed={on}
+                onClick={() => choose(key)}
+                role="radio"
+                aria-checked={on}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-colors ${
                   on ? 'border-primary/50 bg-primary/5' : 'border-border-md hover:border-primary/30'
                 }`}
@@ -88,11 +86,11 @@ export function WidgetSettings() {
                   <span className="block text-xs text-text-subtle">{t(`widget_${key}Hint` as TranslationKey)}</span>
                 </span>
                 <span
-                  className={`w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 ${
+                  className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${
                     on ? 'bg-primary border-primary text-white' : 'border-border-md'
                   }`}
                 >
-                  {on && <Check size={13} strokeWidth={3} />}
+                  {on && <Check size={12} strokeWidth={3} />}
                 </span>
               </button>
             </li>

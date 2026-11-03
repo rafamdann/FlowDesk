@@ -24,6 +24,13 @@
     li::before { content: counter(step); position: absolute; left: 16px; top: 16px; width: 26px; height: 26px; border-radius: 50%; background: var(--green); color: #fff; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: center; }
     li b { display: block; margin-bottom: 2px; }
     li p { margin: 0; color: var(--muted); font-size: 15px; }
+    h2 { font-size: 20px; margin: 36px 0 4px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+    .card > b { display: block; margin-bottom: 8px; }
+    .card ol.sub { list-style: decimal; padding-left: 20px; margin: 0; }
+    .card ol.sub li { counter-increment: none; background: none; border: 0; border-radius: 0; padding: 0; margin: 0 0 8px; color: var(--muted); font-size: 15px; }
+    .card ol.sub li::before { content: none; }
+    code { background: var(--bg); padding: 1px 6px; border-radius: 6px; color: var(--ink); font-size: 14px; }
     button { margin-top: 12px; width: 100%; padding: 14px; border: 0; border-radius: 12px; background: var(--green); color: #fff; font: inherit; font-weight: 600; }
     button.done { background: #2F7A4F; }
     pre { margin: 12px 0 0; padding: 12px; background: var(--bg); border-radius: 10px; font-size: 11px; line-height: 1.45; overflow-x: auto; white-space: pre; color: var(--muted); }
@@ -46,6 +53,16 @@
       <li><b data-t="s5"></b><p data-t="s5p"></p></li>
       <li><b data-t="s6"></b><p data-t="s6p"></p></li>
     </ol>
+
+    <!-- Widgets cannot be ticked or typed into on iOS. A Shortcuts button on
+         the home screen can, without opening anything: its questions pop up
+         over the home screen and it runs FlowDesk's script in the
+         background. -->
+    <h2 data-t="actTitle"></h2>
+    <p class="lead" data-t="actLead"></p>
+    <div class="card"><b data-t="logTitle"></b><ol class="sub" id="logSteps"></ol></div>
+    <div class="card"><b data-t="tickTitle"></b><ol class="sub" id="tickSteps"></ol></div>
+    <div class="card"><b data-t="placeTitle"></b><ol class="sub" id="placeSteps"></ol></div>
   </main>
   <script>
     var pt = /^pt/i.test(navigator.language)
@@ -64,7 +81,7 @@
       s5: 'Adicione o widget',
       s5p: 'No ecrã principal, mantenha o dedo num espaço vazio → Editar → Adicionar widget → Scriptable → escolha o tamanho → Adicionar. Depois mantenha o dedo no widget → Editar widget → Script: FlowDesk.',
       s6: 'Escolha o que mostra',
-      s6p: 'No FlowDesk: Definições → Widget. Tarefas de hoje, lista de tarefas, registo de trabalho, notas — as que quiser. Para um widget mostrar outra coisa, escreva-a em Parameter ao editá-lo (por exemplo notes).'
+      s6p: 'No FlowDesk: Definições → Widget. Escolha uma: tarefas de hoje, lista de tarefas, registo de trabalho ou notas. Para ter outra, adicione um segundo widget e escreva-a em Parameter ao editá-lo (tasks, todos, worklog ou notes).'
     } : {
       title: 'FlowDesk on your home screen',
       lead: 'Today’s tasks in an iPhone widget, kept up to date.',
@@ -80,10 +97,79 @@
       s5: 'Add the widget',
       s5p: 'On your home screen, press and hold an empty spot → Edit → Add Widget → Scriptable → pick a size → Add Widget. Then press and hold the widget → Edit Widget → Script: FlowDesk.',
       s6: 'Choose what it shows',
-      s6p: 'In FlowDesk: Settings → Widget. Today’s tasks, to-dos, work log, notes — any of them. To make one widget show something else, type it into Parameter when editing that widget (for example notes).'
+      s6p: 'In FlowDesk: Settings → Widget. Pick one: today’s tasks, to-dos, work log or notes. For another, add a second widget and type it into Parameter when editing it (tasks, todos, worklog or notes).'
     }
     if (pt) document.documentElement.lang = 'pt'
     document.querySelectorAll('[data-t]').forEach(function (el) { el.textContent = T[el.getAttribute('data-t')] })
+
+    // Steps carry <code> for what is typed exactly, so they go in as markup.
+    var A = pt ? {
+      actTitle: 'Marcar e registar sem abrir nada',
+      actLead: 'Um widget do iPhone não deixa marcar nem escrever — a Apple não permite. Um botão dos Atalhos no ecrã principal deixa: as perguntas aparecem por cima do ecrã principal e nada se abre. Faça estes dois uma vez, na aplicação Atalhos.',
+      logTitle: 'Botão “Registar trabalho”',
+      log: [
+        'Abra a aplicação <b>Atalhos</b> e toque em <b>+</b>.',
+        'Adicione <b>Pedir entrada</b>. Em Pergunta escreva: <code>O que fez, e quanto tempo?</code>',
+        'Adicione <b>Run Script</b> (do Scriptable). Script: <b>FlowDesk</b>. Em Parameter escreva <code>log: </code> e toque em <b>Entrada fornecida</b> por cima do teclado. Desligue <b>Run In App</b>.',
+        'Adicione <b>Mostrar notificação</b> e ponha nela o resultado do Run Script.',
+        'Toque no nome lá em cima e chame-lhe <code>Registar trabalho</code>.',
+        'Ao usar, escreva o que fez e o tempo no fim: <code>Chamada com cliente 45</code> ou <code>Edição 1h30</code>.'
+      ],
+      tickTitle: 'Botão “Marcar tarefa”',
+      tick: [
+        'Nos Atalhos, toque em <b>+</b>.',
+        'Adicione <b>Run Script</b>. Script: <b>FlowDesk</b>. Parameter: <code>todos</code>. Desligue <b>Run In App</b>.',
+        'Adicione <b>Escolher da lista</b>. Pergunta: <code>Qual está feita?</code>',
+        'Adicione outro <b>Run Script</b>. Script: <b>FlowDesk</b>. Em Parameter escreva <code>tick: </code> e toque em <b>Item escolhido</b>. Desligue <b>Run In App</b>.',
+        'Adicione <b>Mostrar notificação</b> com o resultado desse Run Script.',
+        'Chame-lhe <code>Marcar tarefa</code>.'
+      ],
+      placeTitle: 'Pô-los no ecrã principal',
+      place: [
+        'Mantenha o dedo num espaço vazio → <b>Editar</b> → <b>Adicionar widget</b> → <b>Atalhos</b>.',
+        'O pequeno tem um botão; o médio tem quatro. Toque em <b>Adicionar widget</b>.',
+        'Mantenha o dedo nele → <b>Editar widget</b> → escolha os dois atalhos.',
+        'Também funcionam pela Siri: “Registar trabalho”.'
+      ]
+    } : {
+      actTitle: 'Tick off and log without opening anything',
+      actLead: 'An iPhone widget cannot be ticked or typed into — Apple does not allow it. A Shortcuts button on the home screen can: its questions pop up over the home screen and nothing opens. Make these two once, in the Shortcuts app.',
+      logTitle: '“Log work” button',
+      log: [
+        'Open the <b>Shortcuts</b> app and tap <b>+</b>.',
+        'Add <b>Ask for Input</b>. In Prompt write: <code>What did you do, and how long?</code>',
+        'Add <b>Run Script</b> (from Scriptable). Script: <b>FlowDesk</b>. In Parameter type <code>log: </code> then tap <b>Provided Input</b> above the keyboard. Turn <b>Run In App</b> off.',
+        'Add <b>Show Notification</b> and put the Run Script result in it.',
+        'Tap the name at the top and call it <code>Log work</code>.',
+        'When you use it, type what you did with the time at the end: <code>Client call 45</code> or <code>Editing 1h30</code>.'
+      ],
+      tickTitle: '“Tick off” button',
+      tick: [
+        'In Shortcuts, tap <b>+</b>.',
+        'Add <b>Run Script</b>. Script: <b>FlowDesk</b>. Parameter: <code>todos</code>. Turn <b>Run In App</b> off.',
+        'Add <b>Choose from List</b>. Prompt: <code>Which one is done?</code>',
+        'Add another <b>Run Script</b>. Script: <b>FlowDesk</b>. In Parameter type <code>tick: </code> then tap <b>Chosen Item</b>. Turn <b>Run In App</b> off.',
+        'Add <b>Show Notification</b> with that Run Script’s result.',
+        'Call it <code>Tick off</code>.'
+      ],
+      placeTitle: 'Put them on your home screen',
+      place: [
+        'Press and hold an empty spot → <b>Edit</b> → <b>Add Widget</b> → <b>Shortcuts</b>.',
+        'The small one is one button; the medium one holds four. Tap <b>Add Widget</b>.',
+        'Press and hold it → <b>Edit Widget</b> → pick the two shortcuts.',
+        'They work with Siri too: “Log work”.'
+      ]
+    }
+    document.querySelectorAll('[data-t]').forEach(function (el) {
+      var k = el.getAttribute('data-t')
+      if (A[k]) el.textContent = A[k]
+    })
+    function steps(id, list) {
+      document.getElementById(id).innerHTML = list.map(function (x) { return '<li>' + x + '</li>' }).join('')
+    }
+    steps('logSteps', A.log)
+    steps('tickSteps', A.tick)
+    steps('placeSteps', A.place)
 
     // The loader. Kept tiny on purpose: everything else is downloaded from
     // FlowDesk each time the widget refreshes, so it never needs pasting again.
