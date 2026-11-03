@@ -44,6 +44,7 @@
       <li><b data-t="s3"></b><p data-t="s3p"></p></li>
       <li><b data-t="s4"></b><p data-t="s4p"></p></li>
       <li><b data-t="s5"></b><p data-t="s5p"></p></li>
+      <li><b data-t="s6"></b><p data-t="s6p"></p></li>
     </ol>
   </main>
   <script>
@@ -61,7 +62,9 @@
       s4: 'Corra-o uma vez e entre',
       s4p: 'Toque no script FlowDesk. Entre com o email e a palavra-passe do FlowDesk. Aparece uma pré-visualização.',
       s5: 'Adicione o widget',
-      s5p: 'No ecrã principal, mantenha o dedo num espaço vazio → Editar → Adicionar widget → Scriptable → escolha o tamanho → Adicionar. Depois mantenha o dedo no widget → Editar widget → Script: FlowDesk.'
+      s5p: 'No ecrã principal, mantenha o dedo num espaço vazio → Editar → Adicionar widget → Scriptable → escolha o tamanho → Adicionar. Depois mantenha o dedo no widget → Editar widget → Script: FlowDesk.',
+      s6: 'Escolha o que mostra',
+      s6p: 'No FlowDesk: Definições → Widget. Tarefas de hoje, lista de tarefas, registo de trabalho, notas — as que quiser. Para um widget mostrar outra coisa, escreva-a em Parameter ao editá-lo (por exemplo notes).'
     } : {
       title: 'FlowDesk on your home screen',
       lead: 'Today’s tasks in an iPhone widget, kept up to date.',
@@ -75,7 +78,9 @@
       s4: 'Run it once and sign in',
       s4p: 'Tap the FlowDesk script. Sign in with your FlowDesk email and password. A preview appears.',
       s5: 'Add the widget',
-      s5p: 'On your home screen, press and hold an empty spot → Edit → Add Widget → Scriptable → pick a size → Add Widget. Then press and hold the widget → Edit Widget → Script: FlowDesk.'
+      s5p: 'On your home screen, press and hold an empty spot → Edit → Add Widget → Scriptable → pick a size → Add Widget. Then press and hold the widget → Edit Widget → Script: FlowDesk.',
+      s6: 'Choose what it shows',
+      s6p: 'In FlowDesk: Settings → Widget. Today’s tasks, to-dos, work log, notes — any of them. To make one widget show something else, type it into Parameter when editing that widget (for example notes).'
     }
     if (pt) document.documentElement.lang = 'pt'
     document.querySelectorAll('[data-t]').forEach(function (el) { el.textContent = T[el.getAttribute('data-t')] })

@@ -4,7 +4,7 @@ import {
   NotebookPen, Clapperboard,
   ListTodo, Users, Info, FolderOpen, CalendarDays,
   CheckSquare, Wrench, BookOpen, Building2, MessageCircle, MessageSquare, StickyNote, Sparkles,
-  LogOut, Menu, X, ChevronLeft, PanelLeftClose, PanelLeftOpen, ExternalLink, Mic
+  LogOut, Menu, X, ChevronLeft, PanelLeftClose, PanelLeftOpen, ExternalLink, Settings
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useProjectStore } from '../../store/projectStore'
@@ -14,9 +14,7 @@ import { useT } from '../../i18n/useT'
 import { useContentT } from '../../i18n/content'
 import { Avatar } from './Avatar'
 import { NotificationBell } from './NotificationBell'
-import { DictationSettings } from './DictationSettings'
-import { useDictationStore } from '../../store/dictationStore'
-import { formatShortcut } from '../../lib/dictation'
+import { SettingsDialog } from './SettingsDialog'
 import {
   canDockWhatsapp, setWhatsappTab, onWhatsappState, openWhatsapp,
   canDockClaude, setClaudeTab, onClaudeState, openClaude, setSidebarWidth,
@@ -27,8 +25,7 @@ export function Sidebar() {
   const { toggle, lang } = useLanguageStore()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [dictationOpen, setDictationOpen] = useState(false)
-  const dictationShortcut = formatShortcut(useDictationStore((s) => s.shortcut))
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const { t } = useT()
   // The content calendar is Portuguese whatever the switch says, name and all.
   const contentLabel = useContentT().c.title
@@ -396,25 +393,16 @@ export function Sidebar() {
           )}
         </button>
 
-        {/* Dictation: its shortcut, and the team's dictionary. */}
+        {/* Each person's own settings: dictation, and their phone widget. */}
         <button
-          onClick={() => setDictationOpen(true)}
+          onClick={() => setSettingsOpen(true)}
           className={`w-full flex items-center rounded-lg hover:bg-surface-2 transition-colors ${
-            mini ? 'justify-center h-9' : 'justify-between px-3 py-2'
+            mini ? 'justify-center h-9' : 'gap-2 px-3 py-2'
           }`}
-          title={t('dictate_settings')}
+          title={t('settings_title')}
         >
-          {mini ? (
-            <Mic size={15} className="text-text-muted" />
-          ) : (
-            <>
-              <span className="flex items-center gap-2 text-text-muted text-xs font-medium">
-                <Mic size={13} />
-                {t('dictate_settings')}
-              </span>
-              <span className="text-[10px] font-mono text-text-subtle">{dictationShortcut}</span>
-            </>
-          )}
+          <Settings size={mini ? 15 : 13} className="text-text-muted" />
+          {!mini && <span className="text-text-muted text-xs font-medium">{t('settings_title')}</span>}
         </button>
 
         {/* User: collapsed, the avatar is the logout button's own tooltip. */}
@@ -519,7 +507,7 @@ export function Sidebar() {
 
       {/* Out here, not in sidebarContent: that is drawn twice, and the
           mobile drawer's transform would pin a fixed dialog inside it. */}
-      {dictationOpen && <DictationSettings onClose={() => setDictationOpen(false)} />}
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
     </>
   )
 }
