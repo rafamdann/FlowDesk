@@ -33,6 +33,7 @@ import { taskOccurrences, setSkippedOccurrences, type TaskOccurrence, type TaskS
 import { toTask, toCompletionLog } from '../store/taskRows'
 import { defaultColor, isHexColor } from '../lib/personColor'
 import { cleanSections, type WidgetSection } from '../lib/widgetSections'
+import { applyCorrections } from '../lib/dictation'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -562,21 +563,34 @@ async function tick(session: Session, p: Person, t: Strings, title: string): Pro
 }
 
 /**
- * "Client call 45", "Editing 1h30", "Reels 2h": what was done, then how long.
- * Minutes are required, as in the app — a log without time cannot answer
- * the one question it exists for.
+ * What was done, then how long: typed ("Client call 45", "Editing 1h30",
+ * "Reels 2h") or spoken, which comes back from dictation as words with a
+ * full stop ("Client call 45 minutes.", "Edição 1 hora e meia",
+ * "Reels 1 hour and 30 minutes"). Minutes are required, as in the app — a
+ * log without time cannot answer the one question it exists for.
  */
-function parseLog(text: string): { title: string; minutes: number | null } {
-  const unit = '(?:m|min|mins|minutes|minutos)?'
-  const hours = new RegExp(`^(.*?)[\\s,·-]*(\\d+)\\s*h(?:rs?|ours?|oras?)?\\s*(?:(\\d+)\\s*${unit})?\\s*$`, 'i').exec(text)
-  if (hours && hours[1].trim()) return { title: hours[1].trim(), minutes: Number(hours[2]) * 60 + Number(hours[3] ?? 0) }
-  const mins = new RegExp(`^(.*?)[\\s,·-]+(\\d+)\\s*${unit}\\s*$`, 'i').exec(text)
+export function parseLog(raw: string): { title: string; minutes: number | null } {
+  const text = raw.trim().replace(/[.!?,;:\s]+$/, '')
+  const H = '(?:h|hr|hrs|hour|hours|hora|horas)(?![a-zà-ú])'
+  const M = '(?:m|min|mins|minute|minutes|minuto|minutos)(?![a-zà-ú])'
+  const hours = new RegExp(
+    `^(.*?)[\\s,·-]*(\\d+)\\s*${H}(?:\\s*(?:e|and)?\\s*(?:(a\\s+half|meia)|(\\d+)\\s*(?:${M})?))?$`,
+    'i',
+  ).exec(text)
+  if (hours && hours[1].trim()) {
+    const extra = hours[3] ? 30 : Number(hours[4] ?? 0)
+    return { title: hours[1].trim(), minutes: Number(hours[2]) * 60 + extra }
+  }
+  const mins = new RegExp(`^(.*?)[\\s,·-]+(\\d+)\\s*(?:${M})?$`, 'i').exec(text)
   if (mins) return { title: mins[1].trim(), minutes: Number(mins[2]) }
-  return { title: text.trim(), minutes: null }
+  return { title: text, minutes: null }
 }
 
 async function logWork(session: Session, p: Person, t: Strings, text: string): Promise<string> {
-  const { title, minutes } = parseLog(text)
+  // Spoken entries misspell names the same way dictation in the app does,
+  // so the team's dictionary fixes them here too.
+  const words = await rows(session, 'dictation_words', 'select=id,word,heard', true)
+  const { title, minutes } = parseLog(applyCorrections(text, words))
   if (!title) return t.needTitle
   if (!minutes || minutes <= 0) return t.needMinutes
   // An employee's work goes on the project they are on, as in the app; the
