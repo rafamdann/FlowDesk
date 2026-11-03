@@ -141,6 +141,20 @@ export function themeVars(hex: string): CSSProperties {
 }
 
 /** Initials from a name: the first letters of its first two words. */
+/**
+ * A faint fill of a colour: `amount` of it over white, or over whatever is
+ * behind when `over` is 'transparent'. Worked out here rather than with CSS
+ * color-mix(), which phones on an older Chrome or Samsung Internet do not
+ * have — there the fill silently came out as nothing.
+ */
+export function wash(hex: string, amount: number, over: 'white' | 'transparent' = 'white'): string | undefined {
+  if (!isHexColor(hex)) return undefined
+  const [r, g, b] = channels(hex)
+  if (over === 'transparent') return `rgba(${r}, ${g}, ${b}, ${amount})`
+  const mix = (c: number) => Math.round(255 + (c - 255) * amount)
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`
+}
+
 export function initialsOf(name: string): string {
   return name.trim().split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
 }

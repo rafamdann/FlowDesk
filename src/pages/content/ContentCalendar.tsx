@@ -9,6 +9,7 @@ import {
   PlanViewer, toggleTask,
   inProject, useContentBase, useContentData, useContentProject, useContentTasks, usePersonName,
 } from '../../components/content/contentShared'
+import { wash } from '../../lib/personColor'
 
 /** The stages drawn as blocks in a day, in the order a day runs. */
 const WORK_KINDS: ContentTaskKind[] = ['schedule', 'plan', 'record', 'edit', 'deliver']
@@ -743,7 +744,7 @@ function ChipButton({
       style={{
         borderColor: pressed ? col : 'rgba(0,0,0,0.15)',
         boxShadow: pressed ? `inset 0 0 0 1px ${col}` : undefined,
-        backgroundColor: pressed ? `color-mix(in srgb, ${col} 8%, white)` : undefined,
+        backgroundColor: pressed ? wash(col, 0.08) : undefined,
       }}
     >
       {children}
@@ -799,7 +800,7 @@ function TaskBlock({
       className={`group relative text-[0.78rem] leading-tight px-1.5 py-1 rounded-[3px] border-l-[3px] ${
         t.done ? 'opacity-55' : ''
       } ${onDragStart ? 'cursor-grab active:cursor-grabbing select-none' : ''} ${dragging ? 'opacity-40' : ''}`}
-      style={{ borderLeftColor: k, backgroundColor: `color-mix(in srgb, ${k} 9%, transparent)` }}
+      style={{ borderLeftColor: k, backgroundColor: wash(k, 0.09, 'transparent') }}
       title={[t.title, t.detail, who, t.warning].filter(Boolean).join(' · ')}
     >
       <div className="flex items-start gap-1">

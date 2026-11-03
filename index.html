@@ -1,5 +1,9 @@
 <!doctype html>
-<html lang="en">
+<!-- translate="no": FlowDesk translates itself (English / Português). A
+     browser translating it as well rewrites text React is still holding on
+     to, and from then on buttons and lists stop updating or crash outright -
+     on that one phone only, which is what makes it so hard to place. -->
+<html lang="en" translate="no">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
@@ -15,6 +19,11 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#1A5C3A" />
+    <meta name="google" content="notranslate" />
+    <!-- FlowDesk has no dark theme. Without this, Samsung Internet and Chrome
+         on a phone in dark mode invert the page themselves, which leaves dark
+         text on dark fills and the person colours unreadable. -->
+    <meta name="color-scheme" content="only light" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
