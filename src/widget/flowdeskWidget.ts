@@ -620,22 +620,42 @@ function shortcutRequest(): string | null {
   return value == null || String(value).trim() === '' ? null : String(value).trim()
 }
 
-async function answerShortcut(request: string, session: Session | null, t: Strings): Promise<unknown> {
+/**
+ * Works out what a shortcut wants from what it was handed, so a shortcut
+ * needs no wording of its own — the Run Script step just passes along
+ * whatever the step before it produced:
+ *
+ *   nothing                 → the open to-dos, for a Choose from List
+ *   one of those to-dos     → tick it off
+ *   anything else           → a work log entry ("Client call 45")
+ *
+ * `todos`, `tick: …` and `log: …` still work, for shortcuts made that way.
+ */
+async function answerShortcut(request: string | null, session: Session | null, t: Strings): Promise<unknown> {
   if (!session) return t.notSignedIn
   const { person } = await loadPerson(session)
-  const [, verb, rest = ''] = /^(\w+)\s*:?\s*([\s\S]*)$/.exec(request) ?? []
-  switch ((verb ?? '').toLowerCase()) {
-    case 'todos': {
-      const titles = (await openTodos(session, person)).map((r) => String(r.title ?? '').trim()).filter(Boolean)
-      return titles.length ? titles : [t.nothingToDo]
-    }
+  const listTodos = async () => {
+    const titles = (await openTodos(session, person)).map((r) => String(r.title ?? '').trim()).filter(Boolean)
+    return titles.length ? titles : [t.nothingToDo]
+  }
+  const text = (request ?? '').trim()
+  const [, verb = '', rest = ''] = /^(todos|tick|log)\b\s*:?\s*([\s\S]*)$/i.exec(text) ?? []
+  switch (verb.toLowerCase()) {
+    case 'todos':
+      return listTodos()
     case 'tick':
       return rest.trim() === t.nothingToDo ? t.nothingToDo : tick(session, person, t, rest)
     case 'log':
       return logWork(session, person, t, rest)
-    default:
-      return t.unknown
   }
+  if (!text) return listTodos()
+  if (text === t.nothingToDo) return t.nothingToDo
+  // Exactly one of their open to-dos: it came from the list, so tick it.
+  const todos = await openTodos(session, person)
+  if (todos.some((r) => String(r.title ?? '').trim().toLowerCase() === text.toLowerCase())) {
+    return tick(session, person, t, todos.find((r) => String(r.title ?? '').trim().toLowerCase() === text.toLowerCase()).title)
+  }
+  return logWork(session, person, t, text)
 }
 
 // ─── Running ────────────────────────────────────────────────────────────────
@@ -669,8 +689,11 @@ async function run(appUrl: string) {
   let session = await currentSession()
 
   // Asked by a Shortcuts button: act, answer, and show nothing of our own.
+  // From Shortcuts: anything handed to Run Script, or nothing at all when it
+  // is not running in the app (which is how a bare "Run FlowDesk" lists
+  // the to-dos). Run in the app with nothing, it is the menu below.
   const request = config.runsInWidget ? null : shortcutRequest()
-  if (request) {
+  if (request || (!config.runsInWidget && !config.runsInApp)) {
     let answer: unknown
     try {
       answer = await answerShortcut(request, session, t)
