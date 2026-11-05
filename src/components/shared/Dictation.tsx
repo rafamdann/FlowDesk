@@ -31,8 +31,13 @@ type Phase = 'idle' | 'recording' | 'transcribing'
 const MAX_MS = 10 * 60 * 1000
 const SIZE = 28
 const INSET = 4
-const BARS = 5
-/** How often the level is read: the bars' frame rate, and the silence clock. */
+const BARS = 10
+/** Tallest in the middle, so the bars swell like a voice rather than jitter. */
+const BAR_SHAPE = Array.from({ length: BARS }, (_, k) => 0.45 + 0.55 * Math.sin((Math.PI * (k + 0.5)) / BARS))
+/** Where speech lives; hum below and hiss above it are left out of the bars. */
+const VOICE_LOW_HZ = 300
+const VOICE_HIGH_HZ = 3400
+/** How often the level is read for the silence clock. */
 const TICK_MS = 50
 /** Below this a recording is room noise, not a voice. */
 const VOICE_RMS = 0.02
@@ -312,14 +317,11 @@ export function Dictation() {
     // The bars, and the measure of whether anyone actually spoke.
     const audio = new AudioContext()
     const analyser = audio.createAnalyser()
-    analyser.fftSize = 512
-    analyser.smoothingTimeConstant = 0.5
+    analyser.fftSize = 1024
+    analyser.smoothingTimeConstant = 0.6
     audio.createMediaStreamSource(stream).connect(analyser)
     const wave = new Float32Array(analyser.fftSize)
     const freq = new Uint8Array(analyser.frequencyBinCount)
-    // Bins are sampleRate / fftSize wide (~94 Hz); speech sits in the first
-    // thirty or so, split here into one band per bar.
-    const band = Math.max(1, Math.floor(3000 / (audio.sampleRate / analyser.fftSize) / BARS))
     const started = Date.now()
     let voiceMs = 0
     const meter = setInterval(() => {
@@ -327,16 +329,41 @@ export function Dictation() {
       let sum = 0
       for (const v of wave) sum += v * v
       if (Math.sqrt(sum / wave.length) > VOICE_RMS) voiceMs += TICK_MS
-      analyser.getByteFrequencyData(freq)
-      bars.current.forEach((bar, k) => {
-        if (!bar) return
-        let total = 0
-        for (let b = 1 + k * band; b < 1 + (k + 1) * band; b++) total += freq[b]
-        const level = Math.min(1, (total / band / 255) * 1.8)
-        bar.style.height = `${3 + level * 15}px`
-      })
       if (Date.now() - started >= MAX_MS) stop(true)
     }, TICK_MS)
+
+    // The speech band, split into one slice per bar.
+    const hz = audio.sampleRate / analyser.fftSize
+    const low = Math.round(VOICE_LOW_HZ / hz)
+    const band = Math.max(1, Math.floor((VOICE_HIGH_HZ / hz - low) / BARS))
+    const heights = new Array<number>(BARS).fill(0)
+    let floor = 1
+    let frame = 0
+    const draw = () => {
+      analyser.getByteFrequencyData(freq)
+      const slices = heights.map((_, k) => {
+        let total = 0
+        for (let b = low + k * band; b < low + (k + 1) * band; b++) total += freq[b]
+        return total / band / 255
+      })
+      const level = slices.reduce((a, b) => a + b, 0) / BARS
+      // The room sets the floor: it drops at once to anything quieter and
+      // creeps up only slowly, so a fan or a hum sits under it and only a
+      // voice rises above. Pauses between words keep pulling it back down.
+      floor = level < floor ? level : floor + (level - floor) * 0.004
+      const voice = Math.min(1, Math.max(0, (level - floor - 0.05) / 0.22))
+      bars.current.forEach((bar, k) => {
+        if (!bar) return
+        // A little of each slice's own loudness, so the bars are not in lockstep.
+        const texture = Math.min(1.3, Math.max(0.7, level ? slices[k] / level : 1))
+        const target = Math.min(1, voice * BAR_SHAPE[k] * texture)
+        // Rise quickly, settle gently.
+        heights[k] += (target - heights[k]) * (target > heights[k] ? 0.35 : 0.12)
+        bar.style.transform = `scaleY(${0.14 + 0.86 * heights[k]})`
+      })
+      frame = requestAnimationFrame(draw)
+    }
+    frame = requestAnimationFrame(draw)
 
     const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find((m) =>
       MediaRecorder.isTypeSupported(m),
@@ -346,6 +373,7 @@ export function Dictation() {
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
     rec.onstop = async () => {
       clearInterval(meter)
+      cancelAnimationFrame(frame)
       audio.close()
       stream.getTracks().forEach((track) => track.stop())
       recorder.current = null
@@ -478,8 +506,8 @@ export function Dictation() {
           onClick={() => stop(true)}
           title={t('dictate_stop').replace('{shortcut}', shortcutLabel)}
           aria-label={t('dictate_stop').replace('{shortcut}', shortcutLabel)}
-          className={`${pill} gap-[3px] border-primary/40 hover:border-primary`}
-          style={{ width: SIZE + 16, height: SIZE }}
+          className={`${pill} gap-[2px] border-primary/40 hover:border-primary`}
+          style={{ width: SIZE + 24, height: SIZE }}
         >
           {Array.from({ length: BARS }, (_, k) => (
             <span
@@ -487,8 +515,8 @@ export function Dictation() {
               ref={(node) => {
                 bars.current[k] = node
               }}
-              className="w-[3px] rounded-full bg-primary transition-[height] duration-75"
-              style={{ height: 3 }}
+              className="w-[2px] h-[18px] rounded-full bg-primary"
+              style={{ transform: 'scaleY(0.14)' }}
             />
           ))}
         </button>

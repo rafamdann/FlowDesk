@@ -383,7 +383,7 @@ export function Sidebar() {
                 draws flag emoji as two bare letters anyway. */}
             {lang === 'en' ? 'PT' : 'EN'}
           </button>
-          {/* Each person's own settings: dictation, and their phone widget. */}
+          {/* Each person's own settings: dictation. */}
           <button
             onClick={() => setSettingsOpen(true)}
             className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-surface-2 transition-colors"

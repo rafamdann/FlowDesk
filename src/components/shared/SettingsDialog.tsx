@@ -1,15 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { X } from 'lucide-react'
 import { useT } from '../../i18n/useT'
 import { DictationSettings } from './DictationSettings'
-import { WidgetSettings } from './WidgetSettings'
 
-type Tab = 'dictation' | 'widget'
-
-/** Each person's own settings: dictation, and their home-screen widget. */
+/** Each person's own settings: dictation. */
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { t } = useT()
-  const [tab, setTab] = useState<Tab>('dictation')
 
   // Esc closes. Recording a new dictation shortcut stops its own Esc from
   // getting this far, so that one cancels the recording instead.
@@ -20,11 +16,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'dictation', label: t('dictate_settings') },
-    { key: 'widget', label: t('widget_tab') },
-  ]
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -38,24 +29,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <X size={16} />
           </button>
         </div>
-        <div className="flex gap-1 p-1 mb-4 rounded-lg bg-surface-2" role="tablist">
-          {tabs.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={tab === key}
-              onClick={() => setTab(key)}
-              className={`flex-1 h-8 rounded-md text-sm font-medium transition-colors ${
-                tab === key ? 'bg-surface text-text-main shadow-sm' : 'text-text-muted hover:text-text-main'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
         <div className="flex flex-col min-h-0 overflow-y-auto -mx-1 px-1">
-          {tab === 'dictation' ? <DictationSettings /> : <WidgetSettings />}
+          <DictationSettings />
         </div>
       </div>
     </div>
